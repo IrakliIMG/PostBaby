@@ -12,7 +12,8 @@ class PathTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(os.environ, {"XDG_DATA_HOME": temporary}, clear=False):
             with patch("postbaby.paths.os.name", "posix"):
                 result = app_data_dir()
-            self.assertEqual(Path(temporary) / "PostBaby", result)
+                expected = Path(os.path.join(temporary, "PostBaby"))
+                self.assertEqual(expected, result)
             self.assertTrue(result.is_dir())
 
     def test_legacy_database_is_preserved_when_new_location_is_empty(self):

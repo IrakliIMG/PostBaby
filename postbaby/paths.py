@@ -15,7 +15,11 @@ def app_data_dir() -> Path:
         root = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
         directory = Path(root) / APP_NAME if root else Path.home() / "AppData" / "Local" / APP_NAME
     else:
-        directory = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / APP_NAME
+        xdg = os.environ.get("XDG_DATA_HOME")
+        if xdg:
+            directory = Path(os.path.join(xdg, APP_NAME))
+        else:
+            directory = Path.home() / ".local" / "share" / APP_NAME
     directory.mkdir(parents=True, exist_ok=True)
     return directory
 
