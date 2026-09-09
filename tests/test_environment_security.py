@@ -17,6 +17,11 @@ class EnvironmentTests(unittest.TestCase):
         with self.assertRaisesRegex(EnvironmentError, "Unknown environment variable: REGION"):
             Environment({"BASE_URL": "x"}).substitute("{{REGION}}")
 
+    def test_allows_empty_environment_variables(self):
+        source = 'url = "{{BASE_URL}}/{{TOKEN}}/{{USERNAME}}"'
+        result = Environment({"BASE_URL": "https://api.example", "TOKEN": "", "USERNAME": ""}).substitute(source)
+        self.assertEqual('url = "https://api.example//"', result)
+
     def test_execution_ast_preserves_quotes_and_backslashes_in_values(self):
         source = 'def test_value():\n    assert "{{TOKEN}}" == "p\\\'a\\\\th"\n'
         tree = Environment({"TOKEN": "p'a\\th"}).substitute_ast(source)

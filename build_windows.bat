@@ -11,4 +11,19 @@ if errorlevel 1 exit /b %errorlevel%
 pyinstaller --noconfirm --clean PostBaby.spec
 if errorlevel 1 exit /b %errorlevel%
 echo.
-echo Build complete: dist\PostBaby\PostBaby.exe
+echo Executable build complete: dist\PostBaby\PostBaby.exe
+
+set ISCC=
+if exist "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" set ISCC="%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+if exist "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" set ISCC="C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if exist "C:\Program Files\Inno Setup 6\ISCC.exe" set ISCC="C:\Program Files\Inno Setup 6\ISCC.exe"
+
+if defined ISCC (
+    echo Compiling installer...
+    %ISCC% installer.iss
+    if errorlevel 1 exit /b %errorlevel%
+    echo.
+    echo Installer build complete: dist\PostBabySetup.exe
+) else (
+    echo Inno Setup compiler ISCC.exe not found. Skipping installer build.
+)

@@ -50,7 +50,7 @@ class Environment:
                 unknown.add(name)
                 return match.group(0)
             value = self.values.get(name)
-            if value is None or value == "":
+            if value is None:
                 missing.add(name)
                 return match.group(0)
             return str(value)

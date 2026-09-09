@@ -44,7 +44,7 @@ class PostBabyApp(tk.Tk):
         interrupted = self.database.recover_interrupted_sessions()
         if interrupted:
             self.after(150, lambda: self.show_recovery(interrupted))
-        self.after(80, self._drain_events)
+        self._drain_job = self.after(80, self._drain_events)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
     def _menu(self) -> None:
@@ -63,6 +63,23 @@ class PostBabyApp(tk.Tk):
         for child in self.winfo_children():
             child.destroy()
 
+    def go_back(self) -> None:
+        if hasattr(self, "editor"):
+            self.controller.state.source = self.editor.get("1.0", "end-1c")
+        self.show_welcome()
+
+    def new_project(self) -> None:
+        self.project_name.set("My API Project")
+        for key in self.env_vars:
+            self.env_vars[key].set("")
+        self.current_session_id = None
+        self.resume_session_id = None
+        self.result_by_name.clear()
+        self.controller.state.source = ""
+        self.controller.state.tests = []
+        self.controller.state.selected = set()
+        self.show_runner()
+
     def show_welcome(self) -> None:
         self._clear()
         panel = ttk.Frame(self, padding=40)
@@ -70,15 +87,30 @@ class PostBabyApp(tk.Tk):
         ttk.Label(panel, text="🍼", font=("Segoe UI Emoji", 44)).pack()
         ttk.Label(panel, text="POSTBABY", font=("Segoe UI", 26, "bold")).pack(pady=(10, 4))
         ttk.Label(panel, text="Meet your new testing buddy.\n\nPostBaby runs your API tests.\nYour LLM writes them.", justify="center").pack(pady=8)
-        ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x", pady=(18, 7))
-        ttk.Button(panel, text="🧪  OPEN TEST RUNNER", command=self.show_runner).pack(fill="x")
+        
+        has_projects = bool(self.database.session_history())
+        if has_projects:
+            ttk.Label(panel, text="Existing projects found.", font=("Segoe UI", 10, "italic")).pack(pady=(6, 12))
+            ttk.Button(panel, text="📁  OPEN EXISTING PROJECT", command=self.show_history).pack(fill="x", pady=4)
+            ttk.Button(panel, text="✨  NEW PROJECT", command=self.new_project).pack(fill="x", pady=4)
+            ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x", pady=4)
+        else:
+            ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x", pady=(18, 7))
+            ttk.Button(panel, text="🧪  OPEN TEST RUNNER", command=self.new_project).pack(fill="x")
 
     def show_runner(self) -> None:
         self._clear()
         root = ttk.Frame(self, padding=12); root.pack(fill="both", expand=True)
         header = ttk.Frame(root); header.pack(fill="x")
-        ttk.Label(header, text="🍼  POSTBABY", font=("Segoe UI", 17, "bold")).pack(side="left")
-        ttk.Label(header, textvariable=self.status).pack(side="right")
+
+        left_header = ttk.Frame(header); left_header.pack(side="left")
+        ttk.Button(left_header, text="← Back", command=self.go_back).pack(side="left", padx=(0, 10))
+        ttk.Label(left_header, text="🍼  POSTBABY", font=("Segoe UI", 17, "bold")).pack(side="left")
+
+        right_header = ttk.Frame(header); right_header.pack(side="right")
+        ttk.Label(right_header, textvariable=self.status).pack(side="left", padx=(0, 12))
+        ttk.Button(right_header, text="📋 Copy Contract", command=self.copy_llm_message).pack(side="left")
+
         env = ttk.LabelFrame(root, text=" Environment ", padding=8); env.pack(fill="x", pady=(10, 7))
         ttk.Label(env, text="Project name").grid(row=0, column=0, sticky="w"); ttk.Entry(env, textvariable=self.project_name, width=32).grid(row=0, column=1, sticky="ew", padx=(6, 16))
         names = [("Base URL", "BASE_URL", False), ("Username", "USERNAME", False), ("Password", "PASSWORD", True), ("Token", "TOKEN", True), ("API Key", "API_KEY", True), ("Client ID", "CLIENT_ID", False), ("Client Secret", "CLIENT_SECRET", True)]
@@ -87,33 +119,52 @@ class PostBabyApp(tk.Tk):
             ttk.Label(env, text=label).grid(row=row, column=col, sticky="w", pady=2)
             ttk.Entry(env, textvariable=self.env_vars[key], show="•" if secret else "", width=32).grid(row=row, column=col + 1, sticky="ew", padx=(6, 16), pady=2)
         env.columnconfigure(1, weight=1); env.columnconfigure(3, weight=1)
+
         script_box = ttk.LabelFrame(root, text=" Python Test Script ", padding=6); script_box.pack(fill="both", expand=True, pady=5)
-        self.editor = tk.Text(script_box, height=13, wrap="none", font=("Consolas", 10), undo=True)
+        self.editor = tk.Text(script_box, height=12, wrap="none", font=("Consolas", 10), undo=True)
         yscroll = ttk.Scrollbar(script_box, orient="vertical", command=self.editor.yview); xscroll = ttk.Scrollbar(script_box, orient="horizontal", command=self.editor.xview)
         self.editor.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
         self.editor.grid(row=0, column=0, sticky="nsew"); yscroll.grid(row=0, column=1, sticky="ns"); xscroll.grid(row=1, column=0, sticky="ew")
         script_box.columnconfigure(0, weight=1); script_box.rowconfigure(0, weight=1)
-        try: self.editor.insert("1.0", SAMPLE_PATH.read_text())
-        except OSError: pass
-        actions = ttk.Frame(root); actions.pack(fill="x", pady=5)
-        self.parse_button = ttk.Button(actions, text="Parse Tests", command=self.parse_script); self.parse_button.pack(side="left")
-        ttk.Button(actions, text="Clear", command=lambda: self.editor.delete("1.0", "end")).pack(side="left", padx=5)
-        self.run_selected_button = ttk.Button(actions, text="▶ Run Selected", command=lambda: self.start_run(True)); self.run_selected_button.pack(side="right", padx=4)
-        self.run_all_button = ttk.Button(actions, text="▶ Run All", command=lambda: self.start_run(False)); self.run_all_button.pack(side="right", padx=4)
-        self.stop_button = ttk.Button(actions, text="■ Stop", command=self.stop_run, state="disabled"); self.stop_button.pack(side="right", padx=4)
-        self.bar = ttk.Progressbar(root, mode="determinate"); self.bar.pack(fill="x")
+
+        script_actions = ttk.Frame(script_box); script_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
+        self.parse_button = ttk.Button(script_actions, text="Parse Tests", command=self.parse_script); self.parse_button.pack(side="left")
+        ttk.Button(script_actions, text="Clear", command=lambda: self.editor.delete("1.0", "end")).pack(side="left", padx=5)
+
+        if self.controller.state.source:
+            self.editor.insert("1.0", self.controller.state.source)
+        else:
+            try: self.editor.insert("1.0", SAMPLE_PATH.read_text())
+            except OSError: pass
+
+        self.bar = ttk.Progressbar(root, mode="determinate"); self.bar.pack(fill="x", pady=(2, 0))
         ttk.Label(root, textvariable=self.progress).pack(anchor="w")
+
         panes = ttk.PanedWindow(root, orient="horizontal"); panes.pack(fill="both", expand=True, pady=6)
         left = ttk.LabelFrame(panes, text=" Test Cases ", padding=5); right = ttk.LabelFrame(panes, text=" Result Details ", padding=5); panes.add(left, weight=1); panes.add(right, weight=1)
-        controls = ttk.Frame(left); controls.pack(fill="x")
-        ttk.Button(controls, text="Select All", command=lambda: self._select_all(True)).pack(side="left")
-        ttk.Button(controls, text="Clear Selection", command=lambda: self._select_all(False)).pack(side="left", padx=4)
+
+        left_header_frame = ttk.Frame(left); left_header_frame.pack(fill="x", pady=(0, 4))
+        run_controls = ttk.Frame(left_header_frame); run_controls.pack(fill="x", pady=(0, 2))
+        self.run_selected_button = ttk.Button(run_controls, text="▶ Run Selected", command=lambda: self.start_run(True)); self.run_selected_button.pack(side="left", padx=(0, 4))
+        self.run_all_button = ttk.Button(run_controls, text="▶ Run All", command=lambda: self.start_run(False)); self.run_all_button.pack(side="left", padx=4)
+        self.stop_button = ttk.Button(run_controls, text="■ Stop", command=self.stop_run, state="disabled"); self.stop_button.pack(side="left", padx=4)
+
+        select_controls = ttk.Frame(left_header_frame); select_controls.pack(fill="x", pady=(2, 0))
+        ttk.Button(select_controls, text="Select All", command=lambda: self._select_all(True)).pack(side="left")
+        ttk.Button(select_controls, text="Clear Selection", command=lambda: self._select_all(False)).pack(side="left", padx=4)
+
         self.tree = ttk.Treeview(left, columns=("test", "status", "duration"), show="headings", selectmode="browse")
         for col, title, width in (("test", "Test", 290), ("status", "Status", 120), ("duration", "Duration", 75)):
             self.tree.heading(col, text=title); self.tree.column(col, width=width, anchor="w")
         self.tree.pack(fill="both", expand=True, pady=5); self.tree.bind("<ButtonRelease-1>", self._toggle_or_details)
+
+        right_header_frame = ttk.Frame(right); right_header_frame.pack(fill="x", pady=(0, 4))
+        ttk.Label(right_header_frame, text="Result Detail", font=("Segoe UI", 9, "bold")).pack(side="left")
+        ttk.Button(right_header_frame, text="Clear", command=self.clear_result_details).pack(side="right")
+
         self.details = tk.Text(right, wrap="word", font=("Consolas", 10), state="disabled"); detail_scroll = ttk.Scrollbar(right, command=self.details.yview); self.details.configure(yscrollcommand=detail_scroll.set)
         self.details.pack(side="left", fill="both", expand=True); detail_scroll.pack(side="right", fill="y")
+
         footer = ttk.Frame(root); footer.pack(fill="x")
         self.summary = tk.StringVar(value="0 Tests  •  0 PASS  •  0 FAIL  •  0 ERROR")
         ttk.Label(footer, textvariable=self.summary).pack(side="left")
@@ -188,6 +239,8 @@ class PostBabyApp(tk.Tk):
         self.runner.stop(); self.status.set("⏸ Stopping after current test…"); self.stop_button.configure(state="disabled")
 
     def _drain_events(self) -> None:
+        if getattr(self, "_destroyed", False):
+            return
         try:
             while True:
                 kind, value = self.events.get_nowait()
@@ -200,12 +253,18 @@ class PostBabyApp(tk.Tk):
                     self.status.set("⏸ Paused" if session.status == SessionStatus.PAUSED else "✓ Complete")
                     self.progress.set(f"{session.completed_tests} / {session.total_tests} completed"); self._set_running_controls(False)
         except queue.Empty: pass
-        self.after(80, self._drain_events)
+        if not getattr(self, "_destroyed", False):
+            self._drain_job = self.after(80, self._drain_events)
 
     def _set_running_controls(self, running: bool) -> None:
         state = "disabled" if running else "normal"
         self.parse_button.configure(state=state); self.run_selected_button.configure(state=state); self.run_all_button.configure(state=state)
         self.stop_button.configure(state="normal" if running else "disabled")
+
+    def clear_result_details(self) -> None:
+        self.details.configure(state="normal")
+        self.details.delete("1.0", "end")
+        self.details.configure(state="disabled")
 
     def _show_details(self, result) -> None:
         rows = [("Status", result.status), ("Duration", f"{result.duration_ms} ms" if result.duration_ms is not None else None),
@@ -259,7 +318,12 @@ class PostBabyApp(tk.Tk):
         def view() -> None:
             selection = tree.selection()
             if not selection: return
-            self.show_runner(); sid = int(selection[0]); source = self.database.latest_script_snapshot(sid)
+            sid = int(selection[0]); source = self.database.latest_script_snapshot(sid)
+            session = self.database.get_session(sid)
+            if session:
+                proj = self.database.connection.execute("SELECT name FROM projects WHERE id=?", (session.project_id,)).fetchone()
+                if proj: self.project_name.set(proj["name"])
+            self.show_runner()
             if source: self.editor.delete("1.0", "end"); self.editor.insert("1.0", source); self.parse_script()
             for row in self.database.session_results(sid): self.result_by_name[row["function_name"]] = type("Result", (), dict(row))()
             self._render_tests(); window.destroy()
@@ -272,9 +336,20 @@ class PostBabyApp(tk.Tk):
         ttk.Button(controls, text="Export JSON", command=lambda: export_selected("json")).pack(side="left", padx=3)
         ttk.Button(controls, text="Export CSV", command=lambda: export_selected("csv")).pack(side="left", padx=3)
 
+    def destroy(self) -> None:
+        self._destroyed = True
+        if hasattr(self, "_drain_job"):
+            try: self.after_cancel(self._drain_job)
+            except Exception: pass
+        try:
+            self.eval('foreach id [after info] {after cancel $id}')
+        except Exception: pass
+        super().destroy()
+
     def _close(self) -> None:
         if self.running: self.runner.stop()
-        self.database.close(); self.destroy()
+        self.database.close()
+        self.destroy()
 
 
 def main() -> None:
