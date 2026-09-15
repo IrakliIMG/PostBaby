@@ -7,7 +7,7 @@ analysis = Analysis(
     ["postbaby_launcher.py"],
     pathex=["."],
     binaries=[],
-    datas=[("samples/example_api_tests.py", "samples")],
+    datas=[],
     hiddenimports=[],
     hookspath=[],
     excludes=[],

@@ -40,3 +40,16 @@ class DatabaseTests(unittest.TestCase):
         self.assertEqual(1, self.db.get_session(session.id).completed_tests)
         self.assertEqual(1, len(self.db.session_results(session.id)))
         self.assertEqual(TestStatus.PASS, self.db.session_results(session.id)[0]["status"])
+
+    def test_list_projects_and_latest_project_script(self):
+        project = self.db.create_project("Project Omega")
+        session1 = self.db.create_session(project.id, 1)
+        self.db.save_script_snapshot(session1.id, "def test_v1(): pass")
+        session2 = self.db.create_session(project.id, 2)
+        self.db.save_script_snapshot(session2.id, "def test_v2(): pass")
+
+        projects = self.db.list_projects()
+        omega = next((p for p in projects if p["name"] == "Project Omega"), None)
+        self.assertIsNotNone(omega)
+        self.assertEqual(2, omega["session_count"])
+        self.assertEqual("def test_v2(): pass", self.db.latest_project_script(project.id))

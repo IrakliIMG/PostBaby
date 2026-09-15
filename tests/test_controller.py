@@ -34,3 +34,19 @@ class ControllerTests(unittest.TestCase):
         metadata = self.database.connection.execute("SELECT environment_metadata FROM sessions WHERE id=?", (session.id,)).fetchone()[0]
         self.assertIn("https://example.test", metadata)
         self.assertNotIn("do-not-save", metadata)
+
+    def test_save_project_persists_state_and_safe_environment(self):
+        self.controller.state.parse("def test_saved(): assert True")
+        project, session = self.controller.save_project("Saved API", {"BASE_URL": "https://saved.test", "TOKEN": "secret-token", "USERNAME": "testuser"})
+        self.assertEqual("Saved API", project.name)
+        metadata = self.database.connection.execute("SELECT environment_metadata FROM sessions WHERE id=?", (session.id,)).fetchone()[0]
+        self.assertIn("https://saved.test", metadata)
+        self.assertIn("testuser", metadata)
+        self.assertNotIn("secret-token", metadata)
+        self.assertEqual("def test_saved(): assert True", self.database.latest_project_script(project.id))
+
+        # Repeated save on same session updates instead of creating new session
+        self.controller.state.source = "def test_saved(): assert False"
+        _, updated_session = self.controller.save_project("Saved API", {"BASE_URL": "https://updated.test"}, session_id=session.id)
+        self.assertEqual(session.id, updated_session.id)
+        self.assertEqual("def test_saved(): assert False", self.database.latest_project_script(project.id))

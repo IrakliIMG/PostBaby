@@ -71,6 +71,42 @@ class Database:
         row = self.connection.execute("SELECT * FROM projects WHERE name=?", (name,)).fetchone()
         return Project(row["id"], row["name"], row["created_at"]) if row else self.create_project(name)
 
+    def list_projects(self) -> list[sqlite3.Row]:
+        return self.connection.execute(
+            """SELECT p.id, p.name, p.created_at,
+                      COALESCE(MAX(s.updated_at), p.created_at) AS last_modified,
+                      COUNT(s.id) AS session_count
+               FROM projects p
+               LEFT JOIN sessions s ON s.project_id=p.id
+               GROUP BY p.id
+               ORDER BY last_modified DESC, p.id DESC"""
+        ).fetchall()
+
+    def latest_project_script(self, project_id: int) -> Optional[str]:
+        row = self.connection.execute(
+            """SELECT ss.source
+               FROM script_snapshots ss
+               JOIN sessions s ON s.id=ss.session_id
+               WHERE s.project_id=?
+               ORDER BY ss.id DESC LIMIT 1""",
+            (project_id,),
+        ).fetchone()
+        return row["source"] if row else None
+
+    def latest_project_session(self, project_id: int) -> Optional[Session]:
+        row = self.connection.execute(
+            "SELECT * FROM sessions WHERE project_id=? ORDER BY id DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        return self._session(row) if row else None
+
+    def latest_project_environment(self, project_id: int) -> Optional[str]:
+        row = self.connection.execute(
+            "SELECT environment_metadata FROM sessions WHERE project_id=? ORDER BY id DESC LIMIT 1",
+            (project_id,),
+        ).fetchone()
+        return row["environment_metadata"] if row else None
+
     def session_history(self) -> list[sqlite3.Row]:
         return self.connection.execute(
             """SELECT s.*, p.name AS project_name,

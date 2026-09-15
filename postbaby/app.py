@@ -15,9 +15,8 @@ from .llm_message import LLM_MESSAGE
 from .models import SessionStatus, TestStatus
 from .runner import TestRunner
 from .report import ReportGenerator
-from .paths import default_database_path, resource_path
+from .paths import default_database_path
 
-SAMPLE_PATH = resource_path("samples", "example_api_tests.py")
 STATUS_MARK = {"PASS": "✓ PASS", "FAIL": "✗ FAIL", "ERROR": "⚠ ERROR", "RUNNING": "⏱ RUNNING", "NOT_RUN": "○ NOT RUN", "SKIPPED": "– SKIPPED", "INTERRUPTED": "⚠ INTERRUPTED"}
 
 
@@ -37,8 +36,12 @@ class PostBabyApp(tk.Tk):
         self.running = False
         self.env_vars = {key: tk.StringVar() for key in ("BASE_URL", "USERNAME", "PASSWORD", "TOKEN", "API_KEY", "CLIENT_ID", "CLIENT_SECRET")}
         self.project_name = tk.StringVar(value="My API Project")
+        self.save_status = tk.StringVar(value="✓ Saved")
         self.status = tk.StringVar(value="● Ready")
         self.progress = tk.StringVar(value="No tests parsed")
+        self._saved_project_name = "My API Project"
+        self._saved_source = ""
+        self._saved_env = {k: "" for k in self.env_vars}
         self._menu()
         self.show_welcome()
         interrupted = self.database.recover_interrupted_sessions()
@@ -50,9 +53,13 @@ class PostBabyApp(tk.Tk):
     def _menu(self) -> None:
         menu = tk.Menu(self)
         file_menu = tk.Menu(menu, tearoff=False)
-        file_menu.add_command(label="New Session", command=self.show_runner)
+        file_menu.add_command(label="New Project...", command=self.prompt_new_project)
+        file_menu.add_command(label="Open Project...", command=self.show_projects)
+        file_menu.add_command(label="Save Project", command=self.save_project)
+        file_menu.add_separator()
         file_menu.add_command(label="Session History", command=self.show_history)
-        file_menu.add_separator(); file_menu.add_command(label="Exit", command=self._close)
+        file_menu.add_separator()
+        file_menu.add_command(label="Exit", command=self._close)
         tools = tk.Menu(menu, tearoff=False)
         tools.add_command(label="Validate Script", command=self.parse_script)
         tools.add_command(label="Copy LLM Message", command=self.copy_llm_message)
@@ -60,25 +67,277 @@ class PostBabyApp(tk.Tk):
         self.config(menu=menu)
 
     def _clear(self) -> None:
+        if hasattr(self, "editor"):
+            delattr(self, "editor")
         for child in self.winfo_children():
             child.destroy()
 
-    def go_back(self) -> None:
-        if hasattr(self, "editor"):
-            self.controller.state.source = self.editor.get("1.0", "end-1c")
-        self.show_welcome()
+    def _mark_clean(self) -> None:
+        self._saved_project_name = self.project_name.get()
+        self._saved_source = self.editor.get("1.0", "end-1c") if hasattr(self, "editor") else self.controller.state.source
+        self._saved_env = {k: v.get() for k, v in self.env_vars.items()}
+        self.save_status.set("✓ Saved")
 
-    def new_project(self) -> None:
-        self.project_name.set("My API Project")
+    def is_dirty(self) -> bool:
+        if not hasattr(self, "editor"):
+            return False
+        current_source = self.editor.get("1.0", "end-1c")
+        if current_source != getattr(self, "_saved_source", ""):
+            return True
+        if self.project_name.get() != getattr(self, "_saved_project_name", ""):
+            return True
+        current_env = {k: v.get() for k, v in self.env_vars.items()}
+        if current_env != getattr(self, "_saved_env", {}):
+            return True
+        return False
+
+    def _on_modified(self, *args) -> None:
+        if self.is_dirty():
+            self.save_status.set("● Unsaved")
+        else:
+            self.save_status.set("✓ Saved")
+
+    def _on_text_modified(self, event=None) -> None:
+        if hasattr(self, "editor") and self.editor.edit_modified():
+            self._on_modified()
+            self.editor.edit_modified(False)
+
+    def save_project(self) -> bool:
+        name = self.project_name.get().strip()
+        if not name:
+            messagebox.showerror("Invalid Project Name", "Project name cannot be empty.", parent=self)
+            return False
+        source = self.editor.get("1.0", "end-1c") if hasattr(self, "editor") else self.controller.state.source
+        self.controller.state.source = source
+        self.controller.state.parse(source)
+        env = self._environment()
+        try:
+            project, session = self.controller.save_project(name, env, self.current_session_id)
+            self.current_session_id = session.id
+            self._mark_clean()
+            self.save_status.set("✓ Saved")
+            self.status.set(f"✓ Saved: {name}")
+            return True
+        except Exception as err:
+            messagebox.showerror("Save Failed", f"Could not save project: {err}", parent=self)
+            return False
+
+    def go_back(self) -> None:
+        if self.is_dirty():
+            choice = self._prompt_unsaved_changes()
+            if choice == "save":
+                if not self.save_project():
+                    return
+                self.show_welcome()
+            elif choice == "discard":
+                if hasattr(self, "_saved_source"):
+                    self.controller.state.source = self._saved_source
+                self.show_welcome()
+            elif choice == "cancel":
+                return
+        else:
+            if hasattr(self, "editor"):
+                self.controller.state.source = self.editor.get("1.0", "end-1c")
+            self.show_welcome()
+
+    def _prompt_unsaved_changes(self) -> str:
+        dlg = tk.Toplevel(self)
+        dlg.title("Unsaved Changes")
+        dlg.geometry("380x135")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        choice = ["cancel"]
+
+        def on_action(action: str) -> None:
+            choice[0] = action
+            dlg.destroy()
+
+        content = ttk.Frame(dlg, padding=(20, 16, 20, 16))
+        content.pack(fill="both", expand=True)
+
+        ttk.Label(content, text="You have unsaved changes.", font=("Segoe UI", 11)).pack(anchor="w", pady=(0, 16))
+
+        btn_box = ttk.Frame(content)
+        btn_box.pack(fill="x")
+
+        ttk.Button(btn_box, text="Save & Back", command=lambda: on_action("save")).pack(side="right", padx=(5, 0))
+        ttk.Button(btn_box, text="Cancel", command=lambda: on_action("cancel")).pack(side="right", padx=5)
+        ttk.Button(btn_box, text="Discard", command=lambda: on_action("discard")).pack(side="right")
+
+        dlg.protocol("WM_DELETE_WINDOW", lambda: on_action("cancel"))
+        self.wait_window(dlg)
+        return choice[0]
+
+    def prompt_new_project(self) -> None:
+        if hasattr(self, "editor") and self.is_dirty():
+            choice = self._prompt_unsaved_changes()
+            if choice == "save":
+                if not self.save_project():
+                    return
+            elif choice == "cancel":
+                return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("New Project")
+        dlg.geometry("380x150")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        content = ttk.Frame(dlg, padding=(20, 16, 20, 16))
+        content.pack(fill="both", expand=True)
+
+        ttk.Label(content, text="Project Name", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+        name_var = tk.StringVar(value="")
+        entry = ttk.Entry(content, textvariable=name_var, width=36, font=("Segoe UI", 10))
+        entry.pack(fill="x", pady=(6, 16))
+        entry.focus_set()
+
+        def create() -> None:
+            val = name_var.get().strip()
+            if not val:
+                messagebox.showerror("Invalid Name", "Please enter a project name.", parent=dlg)
+                return
+            dlg.destroy()
+            self._create_and_open_new_project(val)
+
+        btn_box = ttk.Frame(content)
+        btn_box.pack(fill="x")
+        ttk.Button(btn_box, text="Create Project", command=create).pack(side="right", padx=(6, 0))
+        ttk.Button(btn_box, text="Cancel", command=dlg.destroy).pack(side="right")
+
+        entry.bind("<Return>", lambda _: create())
+        dlg.protocol("WM_DELETE_WINDOW", dlg.destroy)
+        self.wait_window(dlg)
+
+    def _create_and_open_new_project(self, name: str) -> None:
+        project = self.database.get_or_create_project(name)
+        self.project_name.set(project.name)
         for key in self.env_vars:
             self.env_vars[key].set("")
         self.current_session_id = None
         self.resume_session_id = None
         self.result_by_name.clear()
-        self.controller.state.source = ""
+
+        source = self.database.latest_project_script(project.id)
+        self.controller.state.source = source if source is not None else ""
+
         self.controller.state.tests = []
         self.controller.state.selected = set()
         self.show_runner()
+        self.save_project()
+        self.status.set(f"● Project: {project.name}")
+
+    def new_project(self) -> None:
+        self.prompt_new_project()
+
+    def show_projects(self) -> None:
+        if hasattr(self, "editor") and self.is_dirty():
+            choice = self._prompt_unsaved_changes()
+            if choice == "save":
+                if not self.save_project():
+                    return
+            elif choice == "cancel":
+                return
+        self._clear()
+
+        root = ttk.Frame(self, padding=20)
+        root.pack(fill="both", expand=True)
+
+        top_bar = ttk.Frame(root)
+        top_bar.pack(fill="x", pady=(0, 16))
+        ttk.Button(top_bar, text="← Back", command=self.show_welcome).pack(side="left")
+        ttk.Label(top_bar, text="📁 Your Projects", font=("Segoe UI", 16, "bold")).pack(side="left", padx=(14, 0))
+        ttk.Button(top_bar, text="✨ New Project", command=self.prompt_new_project).pack(side="right")
+
+        projects = self.database.list_projects()
+
+        if not projects:
+            empty_box = ttk.Frame(root, padding=40)
+            empty_box.pack(expand=True)
+            ttk.Label(empty_box, text="No projects found.", font=("Segoe UI", 12, "italic")).pack(pady=(0, 12))
+            ttk.Button(empty_box, text="✨ Create First Project", command=self.prompt_new_project).pack()
+            return
+
+        canvas = tk.Canvas(root, borderwidth=0, highlightthickness=0)
+        scrollbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
+        list_frame = ttk.Frame(canvas)
+
+        list_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=list_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        for p in projects:
+            pid = p["id"]
+            name = p["name"]
+            raw_time = p["last_modified"] or ""
+            fmt_time = raw_time[:19].replace("T", " ") if raw_time else "Never"
+            session_count = p["session_count"]
+
+            card = ttk.LabelFrame(list_frame, padding=(16, 12))
+            card.pack(fill="x", expand=True, pady=6, padx=4)
+
+            left_card = ttk.Frame(card)
+            left_card.pack(side="left", fill="both", expand=True)
+
+            ttk.Label(left_card, text=name, font=("Segoe UI", 13, "bold")).pack(anchor="w")
+            info_text = f"Last modified: {fmt_time}"
+            if session_count:
+                info_text += f"   •   {session_count} session{'s' if session_count != 1 else ''}"
+            ttk.Label(left_card, text=info_text, font=("Segoe UI", 9), foreground="#6c757d").pack(anchor="w", pady=(3, 0))
+
+            right_card = ttk.Frame(card)
+            right_card.pack(side="right", padx=(12, 0))
+            ttk.Button(right_card, text="Open", command=lambda p_id=pid: self.open_project(p_id)).pack(side="right")
+
+    def open_project(self, project_id: int) -> None:
+        p_row = self.database.connection.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+        if not p_row:
+            return
+        self.project_name.set(p_row["name"])
+
+        for k in self.env_vars:
+            self.env_vars[k].set("")
+
+        raw_meta = self.database.latest_project_environment(project_id)
+        if raw_meta:
+            try:
+                import json
+                meta = json.loads(raw_meta)
+                for k in ("BASE_URL", "USERNAME", "CLIENT_ID"):
+                    if k in meta:
+                        self.env_vars[k].set(meta[k])
+            except Exception:
+                pass
+
+        source = self.database.latest_project_script(project_id)
+        self.controller.state.source = source if source is not None else ""
+
+        latest_session = self.database.latest_project_session(project_id)
+        self.resume_session_id = None
+        self.show_runner()
+
+        self.result_by_name.clear()
+        if latest_session:
+            self.current_session_id = latest_session.id
+            for row in self.database.session_results(latest_session.id):
+                self.result_by_name[row["function_name"]] = type("Result", (), dict(row))()
+        else:
+            self.current_session_id = None
+
+        self._render_tests()
+        self._mark_clean()
+        self.save_status.set("✓ Saved")
+        self.status.set(f"✓ Opened: {p_row['name']}")
 
     def show_welcome(self) -> None:
         self._clear()
@@ -88,15 +347,15 @@ class PostBabyApp(tk.Tk):
         ttk.Label(panel, text="POSTBABY", font=("Segoe UI", 26, "bold")).pack(pady=(10, 4))
         ttk.Label(panel, text="Meet your new testing buddy.\n\nPostBaby runs your API tests.\nYour LLM writes them.", justify="center").pack(pady=8)
         
-        has_projects = bool(self.database.session_history())
+        has_projects = bool(self.database.list_projects())
         if has_projects:
             ttk.Label(panel, text="Existing projects found.", font=("Segoe UI", 10, "italic")).pack(pady=(6, 12))
-            ttk.Button(panel, text="📁  OPEN EXISTING PROJECT", command=self.show_history).pack(fill="x", pady=4)
-            ttk.Button(panel, text="✨  NEW PROJECT", command=self.new_project).pack(fill="x", pady=4)
+            ttk.Button(panel, text="📁  OPEN EXISTING PROJECT", command=self.show_projects).pack(fill="x", pady=4)
+            ttk.Button(panel, text="✨  NEW PROJECT", command=self.prompt_new_project).pack(fill="x", pady=4)
             ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x", pady=4)
         else:
-            ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x", pady=(18, 7))
-            ttk.Button(panel, text="🧪  OPEN TEST RUNNER", command=self.new_project).pack(fill="x")
+            ttk.Button(panel, text="✨  NEW PROJECT", command=self.prompt_new_project).pack(fill="x", pady=(18, 7))
+            ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x")
 
     def show_runner(self) -> None:
         self._clear()
@@ -104,12 +363,15 @@ class PostBabyApp(tk.Tk):
         header = ttk.Frame(root); header.pack(fill="x")
 
         left_header = ttk.Frame(header); left_header.pack(side="left")
-        ttk.Button(left_header, text="← Back", command=self.go_back).pack(side="left", padx=(0, 10))
-        ttk.Label(left_header, text="🍼  POSTBABY", font=("Segoe UI", 17, "bold")).pack(side="left")
+        ttk.Button(left_header, text="← Back", command=self.go_back).pack(side="left", padx=(0, 12))
+        ttk.Label(left_header, text="Project:", font=("Segoe UI", 11, "bold")).pack(side="left", padx=(0, 6))
+        ttk.Label(left_header, textvariable=self.project_name, font=("Segoe UI", 12, "bold"), foreground="#0d6efd").pack(side="left")
 
         right_header = ttk.Frame(header); right_header.pack(side="right")
-        ttk.Label(right_header, textvariable=self.status).pack(side="left", padx=(0, 12))
-        ttk.Button(right_header, text="📋 Copy Contract", command=self.copy_llm_message).pack(side="left")
+        ttk.Label(right_header, textvariable=self.save_status, font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
+        ttk.Button(right_header, text="💾 Save", command=self.save_project).pack(side="left", padx=(0, 6))
+        ttk.Button(right_header, text="📋 Copy Contract", command=self.copy_llm_message).pack(side="left", padx=(0, 10))
+        ttk.Label(right_header, textvariable=self.status, font=("Segoe UI", 9)).pack(side="left")
 
         env = ttk.LabelFrame(root, text=" Environment ", padding=8); env.pack(fill="x", pady=(10, 7))
         ttk.Label(env, text="Project name").grid(row=0, column=0, sticky="w"); ttk.Entry(env, textvariable=self.project_name, width=32).grid(row=0, column=1, sticky="ew", padx=(6, 16))
@@ -133,9 +395,10 @@ class PostBabyApp(tk.Tk):
 
         if self.controller.state.source:
             self.editor.insert("1.0", self.controller.state.source)
-        else:
-            try: self.editor.insert("1.0", SAMPLE_PATH.read_text())
-            except OSError: pass
+
+        self._mark_clean()
+        self.editor.bind("<KeyRelease>", lambda _: self._on_modified())
+        self.editor.bind("<<Modified>>", self._on_text_modified)
 
         self.bar = ttk.Progressbar(root, mode="determinate"); self.bar.pack(fill="x", pady=(2, 0))
         ttk.Label(root, textvariable=self.progress).pack(anchor="w")
@@ -175,15 +438,28 @@ class PostBabyApp(tk.Tk):
         ttk.Button(footer, text="Export HTML", command=lambda: self.export_report("html")).pack(side="right", padx=3)
         self.parse_script()
 
-    def parse_script(self) -> None:
-        result = self.controller.state.parse(self.editor.get("1.0", "end-1c"))
-        self.result_by_name.clear(); self._render_tests()
+    def parse_script(self, clear_results: bool = True) -> None:
+        source = self.editor.get("1.0", "end-1c") if hasattr(self, "editor") else self.controller.state.source
+        if not source.strip():
+            self.controller.state.tests = []
+            self.controller.state.selected = set()
+            if clear_results:
+                self.result_by_name.clear()
+            self._render_tests()
+            self.status.set("● Ready")
+            return
+
+        result = self.controller.state.parse(source)
+        if clear_results:
+            self.result_by_name.clear()
+        self._render_tests()
         if result.valid:
             self.status.set(f"✓ Script valid — {len(result.parse_result.tests)} test cases")
             if result.warnings: messagebox.showwarning("Script warnings", "\n".join(result.warnings), parent=self)
         else:
             self.status.set("✗ Script validation failed")
-            messagebox.showerror("PostBaby could not validate this script.", "\n".join(result.errors), parent=self)
+            if hasattr(self, "editor"):
+                messagebox.showerror("PostBaby could not validate this script.", "\n".join(result.errors), parent=self)
 
     def _render_tests(self) -> None:
         for item in self.tree.get_children(): self.tree.delete(item)
@@ -326,7 +602,9 @@ class PostBabyApp(tk.Tk):
             self.show_runner()
             if source: self.editor.delete("1.0", "end"); self.editor.insert("1.0", source); self.parse_script()
             for row in self.database.session_results(sid): self.result_by_name[row["function_name"]] = type("Result", (), dict(row))()
-            self._render_tests(); window.destroy()
+            self._render_tests()
+            self._mark_clean()
+            window.destroy()
         def export_selected(report_type: str) -> None:
             selection = tree.selection()
             if selection: self.export_report(report_type, int(selection[0]))
@@ -346,8 +624,18 @@ class PostBabyApp(tk.Tk):
         except Exception: pass
         super().destroy()
 
-    def _close(self) -> None:
-        if self.running: self.runner.stop()
+    def _close(self, prompt: bool = True) -> None:
+        if getattr(self, "_destroyed", False):
+            return
+        if prompt and hasattr(self, "editor") and self.is_dirty():
+            choice = self._prompt_unsaved_changes()
+            if choice == "save":
+                if not self.save_project():
+                    return
+            elif choice == "cancel":
+                return
+        if self.running:
+            self.runner.stop()
         self.database.close()
         self.destroy()
 

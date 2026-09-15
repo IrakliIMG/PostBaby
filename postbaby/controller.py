@@ -44,3 +44,34 @@ class ApplicationController:
         if not tests:
             raise ValueError("Parse a script and select at least one test first.")
         return self.sessions.create_session(self.database.get_or_create_project(project_name.strip()).id, self.state.source, tests, environment), tests
+
+    def save_project(self, project_name: str, environment: Mapping[str, str | None], session_id: int | None = None):
+        name = project_name.strip()
+        if not name:
+            raise ValueError("Project name cannot be empty.")
+        project = self.database.get_or_create_project(name)
+        import json
+        from .models import utc_now
+        safe_env = {k: environment.get(k, "") for k in ("BASE_URL", "USERNAME", "CLIENT_ID") if environment.get(k)}
+        metadata = json.dumps(safe_env)
+        tests = self.state.tests
+        session = None
+        if session_id:
+            s_row = self.database.connection.execute("SELECT * FROM sessions WHERE id=? AND project_id=?", (session_id, project.id)).fetchone()
+            if s_row:
+                self.database.connection.execute(
+                    "UPDATE sessions SET total_tests=?, environment_metadata=?, updated_at=? WHERE id=?",
+                    (len(tests), metadata, utc_now(), session_id),
+                )
+                self.database.save_script_snapshot(session_id, self.state.source)
+                existing_runs = self.database.connection.execute("SELECT COUNT(*) as c FROM test_runs WHERE session_id=?", (session_id,)).fetchone()["c"]
+                if existing_runs == 0 and tests:
+                    self.database.save_test_runs(session_id, tests)
+                self.database.connection.commit()
+                session = self.database.get_session(session_id)
+        if not session:
+            session = self.database.create_session(project.id, len(tests), metadata)
+            self.database.save_script_snapshot(session.id, self.state.source)
+            if tests:
+                self.database.save_test_runs(session.id, tests)
+        return project, session
