@@ -51,13 +51,7 @@ analysis = Analysis(
         "_uuid",
     ],
     hookspath=[],
-    excludes=[
-        "pytest",
-        "unittest",
-        "subprocess",
-        "shutil",
-        "socketserver",
-    ],
+    excludes=[],
 )
 pyz = PYZ(analysis.pure)
 exe = EXE(
