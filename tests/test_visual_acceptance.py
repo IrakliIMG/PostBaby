@@ -31,7 +31,7 @@ class VisualAcceptanceTests(unittest.TestCase):
                     self.assertEqual(THEMES["dark"]["input_fg"], pe.normal_fg)
                     self.assertEqual(THEMES["dark"]["input_placeholder"], pe.placeholder_fg)
 
-                # 4. Check modern scrollbars
+                # 4. Check modern scrollbars & splitter
                 self.assertTrue(hasattr(app, "editor_yscroll"))
                 self.assertTrue(hasattr(app, "editor_xscroll"))
                 self.assertTrue(hasattr(app, "tree_scroll"))
@@ -39,6 +39,14 @@ class VisualAcceptanceTests(unittest.TestCase):
                 self.assertEqual(8, app.editor_yscroll.thickness)
                 self.assertEqual(8, app.tree_scroll.thickness)
                 self.assertEqual(8, app.detail_scroll.thickness)
+
+                self.assertTrue(hasattr(app, "split_view"))
+                self.assertIn(app.split_view.splitter.thickness, (10, 12))
+                self.assertEqual("sb_h_double_arrow", app.split_view.splitter.cget("cursor"))
+
+                self.assertTrue(hasattr(app, "v_split"))
+                self.assertEqual(12, app.v_split.splitter.thickness)
+                self.assertEqual("sb_v_double_arrow", app.v_split.splitter.cget("cursor"))
 
                 # 5. Check treeview columns
                 cols = app.tree.cget("columns")

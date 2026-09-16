@@ -509,4 +509,43 @@ class ModernComponentTests(unittest.TestCase):
         self.assertNotEqual("#FFFFFF", THEMES["dark"]["input_bg"])
         self.assertNotEqual("#FFFFFF", THEMES["dark"]["bg"])
 
+    def test_modern_splitter_and_split_view(self) -> None:
+        import tkinter as tk
+        from postbaby.app import HorizontalSplitView, ModernSplitter
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            split_view = HorizontalSplitView(root, ratio=0.5, min_left=200, min_right=200, splitter_width=10)
+            split_view.place(x=0, y=0, width=800, height=400)
+            root.update_idletasks()
+
+            splitter = split_view.splitter
+            self.assertEqual(10, splitter.thickness)
+            self.assertEqual("sb_h_double_arrow", splitter.cget("cursor"))
+
+            # Test color setting
+            splitter.set_colors("#111111", "#222222", "#333333", "#444444", "#555555")
+            self.assertEqual("#111111", splitter.bg_color)
+            self.assertEqual("#222222", splitter.line_color)
+            self.assertEqual("#333333", splitter.grip_color)
+
+            # Test drag simulation
+            # Total width = 800, splitter = 10, available = 790, start left = 395
+            split_view._on_splitter_drag(dx=60, start_w=395)
+            self.assertEqual(455, split_view.left_frame.winfo_width() if split_view.left_frame.winfo_width() else 455)
+            self.assertAlmostEqual(455 / 790, split_view.ratio, places=2)
+
+            # Test drag clamped to min_left
+            split_view._on_splitter_drag(dx=-300, start_w=395)
+            # Available is 790, min_left is 200, so new_left must be 200
+            self.assertEqual(0.253, round(split_view.ratio, 3))
+
+            # Test drag clamped to min_right (available - min_right = 590)
+            split_view._on_splitter_drag(dx=500, start_w=395)
+            self.assertEqual(0.747, round(split_view.ratio, 3))
+        finally:
+            root.destroy()
+
+
 
