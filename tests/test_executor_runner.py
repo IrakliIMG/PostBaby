@@ -82,6 +82,23 @@ class ExecutorTests(unittest.TestCase):
         result = self.executor.execute(source, case, {"BASE_URL": "https://example.com"})
         self.assertEqual(TestStatus.PASS, result.status)
 
+    def test_function_scoped_stdlib_import_uuid_succeeds(self):
+        source = (
+            "def test_customer_product_statuses_list_without_jwt():\n"
+            "    import uuid\n"
+            "    test_id = str(uuid.uuid4())\n"
+            "    assert len(test_id) == 36\n"
+        )
+        case = parse_script(source).tests[0]
+        result = self.executor.execute(source, case, {"BASE_URL": "https://example.com"})
+        self.assertEqual(TestStatus.PASS, result.status)
+
+    def test_bundled_stdlib_exports(self):
+        import postbaby.bundled_stdlib as bs
+        for mod_name in ("uuid", "base64", "hashlib", "hmac", "secrets", "json", "re", "datetime"):
+            self.assertTrue(hasattr(bs, mod_name), f"Missing bundled module {mod_name}")
+
+
     def test_runtime_safe_os_and_pathlib_proxies_block_dangerous_operations(self):
         # 1. Safe os usage works
         safe_source = (
