@@ -419,3 +419,94 @@ class PostBabyBehaviorTests(unittest.TestCase):
             app._close(prompt=False)
 
 
+class ModernComponentTests(unittest.TestCase):
+    """Verify modern UI widgets: ModernScrollbar, PlaceholderEntry, and theme tokens."""
+
+    def test_modern_scrollbar_protocol_and_theming(self) -> None:
+        import tkinter as tk
+        from postbaby.app import ModernScrollbar
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            txt = tk.Text(root)
+            sb_v = ModernScrollbar(root, orient="vertical", command=txt.yview, width=8)
+            sb_h = ModernScrollbar(root, orient="horizontal", command=txt.xview, width=8)
+
+            txt.configure(yscrollcommand=sb_v.set, xscrollcommand=sb_h.set)
+
+            # Test string and float fractions
+            sb_v.set("0.25", "0.75")
+            self.assertEqual(0.25, sb_v.first)
+            self.assertEqual(0.75, sb_v.last)
+
+            # Test color reconfiguration
+            sb_v.set_colors("#111111", "#222222", "#333333")
+            self.assertEqual("#111111", sb_v.track_color)
+            self.assertEqual("#222222", sb_v.thumb_color)
+            self.assertEqual("#333333", sb_v.hover_color)
+        finally:
+            root.destroy()
+
+    def test_placeholder_entry_non_destructive_behavior(self) -> None:
+        import tkinter as tk
+        from postbaby.app import PlaceholderEntry
+
+        root = tk.Tk()
+        root.withdraw()
+        try:
+            var = tk.StringVar(value="")
+            entry = PlaceholderEntry(root, placeholder="https://api.example.com", textvariable=var)
+
+            # 1. Unfocused with empty var -> shows placeholder, var remains empty!
+            self.assertEqual("https://api.example.com", entry.get())
+            self.assertEqual("", var.get())
+
+            # 2. Focus in -> clears placeholder for user typing
+            entry._on_focus_in()
+            self.assertEqual("", entry.get())
+
+            # 3. User types actual value
+            entry.insert(0, "https://api.production.com")
+            entry._on_key_release()
+            self.assertEqual("https://api.production.com", var.get())
+
+            # 4. Programmatic update via StringVar
+            var.set("https://restored.api.com")
+            self.assertEqual("https://restored.api.com", entry.get())
+
+            # 5. Clear value and blur -> placeholder returns, var is empty
+            entry.delete(0, "end")
+            entry._on_focus_out()
+            self.assertEqual("https://api.example.com", entry.get())
+            self.assertEqual("", var.get())
+        finally:
+            root.destroy()
+
+    def test_themes_palette_completeness(self) -> None:
+        from postbaby.app import THEMES
+
+        self.assertIn("dark", THEMES)
+        self.assertIn("light", THEMES)
+
+        required_keys = {
+            "bg", "header_bg", "sidebar_bg", "card_bg", "card_border",
+            "card_hover", "active_bg", "input_bg", "input_fg", "input_border",
+            "input_placeholder", "text_primary", "text_secondary", "text_muted",
+            "accent", "accent_hover", "btn_primary_bg", "btn_primary_fg",
+            "btn_danger_bg", "btn_danger_fg", "btn_secondary_bg", "btn_secondary_fg",
+            "editor_bg", "editor_fg", "editor_insert", "gutter_bg", "gutter_fg",
+            "scrollbar_track", "scrollbar_thumb", "scrollbar_hover",
+            "highlight_focus", "highlight_selected", "status_pass", "status_fail",
+            "status_error", "status_running", "status_not_run"
+        }
+
+        for mode in ("dark", "light"):
+            for key in required_keys:
+                self.assertIn(key, THEMES[mode], f"Missing key '{key}' in THEMES['{mode}']")
+
+        # Verify dark mode input is dark and distinct from white
+        self.assertNotEqual("#FFFFFF", THEMES["dark"]["input_bg"])
+        self.assertNotEqual("#FFFFFF", THEMES["dark"]["bg"])
+
+

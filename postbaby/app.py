@@ -31,34 +31,42 @@ STATUS_MARK = {
 
 THEMES: dict[str, dict[str, str]] = {
     "dark": {
-        "bg": "#0F141C",
-        "header_bg": "#161D27",
-        "sidebar_bg": "#131822",
-        "card_bg": "#1A2230",
-        "card_border": "#283446",
-        "card_hover": "#222D3E",
-        "active_bg": "#253347",
-        "text_primary": "#E2E8F0",
+        "bg": "#0D1117",
+        "header_bg": "#131821",
+        "sidebar_bg": "#0F141C",
+        "card_bg": "#161D27",
+        "card_border": "#222B38",
+        "card_hover": "#1C2431",
+        "active_bg": "#1E3048",
+        "input_bg": "#0E131A",
+        "input_fg": "#F8FAFC",
+        "input_border": "#263242",
+        "input_placeholder": "#64748B",
+        "text_primary": "#F1F5F9",
         "text_secondary": "#94A3B8",
         "text_muted": "#64748B",
         "accent": "#38BDF8",
         "accent_hover": "#0EA5E9",
         "btn_primary_bg": "#0284C7",
         "btn_primary_fg": "#FFFFFF",
-        "btn_danger_bg": "#EF4444",
+        "btn_danger_bg": "#DC2626",
         "btn_danger_fg": "#FFFFFF",
-        "btn_secondary_bg": "#263346",
+        "btn_secondary_bg": "#1E2633",
         "btn_secondary_fg": "#CBD5E1",
-        "entry_bg": "#0F141C",
-        "entry_fg": "#F1F5F9",
-        "entry_border": "#334155",
-        "editor_bg": "#0B0F17",
+        "btn_secondary_border": "#2C384A",
+        "entry_bg": "#0E131A",
+        "entry_fg": "#F8FAFC",
+        "entry_border": "#263242",
+        "editor_bg": "#0B0F15",
         "editor_fg": "#E2E8F0",
         "editor_insert": "#38BDF8",
-        "gutter_bg": "#0B0F17",
+        "gutter_bg": "#0B0F15",
         "gutter_fg": "#475569",
-        "highlight_focus": "#1E3A5F",
-        "highlight_selected": "#16273C",
+        "scrollbar_track": "#0B0F15",
+        "scrollbar_thumb": "#283344",
+        "scrollbar_hover": "#3E4C63",
+        "highlight_focus": "#16314F",
+        "highlight_selected": "#122438",
         "status_pass": "#22C55E",
         "status_fail": "#EF4444",
         "status_error": "#F59E0B",
@@ -66,13 +74,17 @@ THEMES: dict[str, dict[str, str]] = {
         "status_not_run": "#64748B",
     },
     "light": {
-        "bg": "#F1F5F9",
+        "bg": "#F5F7FA",
         "header_bg": "#FFFFFF",
         "sidebar_bg": "#F8FAFC",
         "card_bg": "#FFFFFF",
         "card_border": "#E2E8F0",
         "card_hover": "#F1F5F9",
         "active_bg": "#E0F2FE",
+        "input_bg": "#FFFFFF",
+        "input_fg": "#0F172A",
+        "input_border": "#CBD5E1",
+        "input_placeholder": "#94A3B8",
         "text_primary": "#0F172A",
         "text_secondary": "#475569",
         "text_muted": "#94A3B8",
@@ -82,8 +94,9 @@ THEMES: dict[str, dict[str, str]] = {
         "btn_primary_fg": "#FFFFFF",
         "btn_danger_bg": "#DC2626",
         "btn_danger_fg": "#FFFFFF",
-        "btn_secondary_bg": "#E2E8F0",
+        "btn_secondary_bg": "#F1F5F9",
         "btn_secondary_fg": "#1E293B",
+        "btn_secondary_border": "#CBD5E1",
         "entry_bg": "#FFFFFF",
         "entry_fg": "#0F172A",
         "entry_border": "#CBD5E1",
@@ -92,6 +105,9 @@ THEMES: dict[str, dict[str, str]] = {
         "editor_insert": "#0284C7",
         "gutter_bg": "#F8FAFC",
         "gutter_fg": "#94A3B8",
+        "scrollbar_track": "#F5F7FA",
+        "scrollbar_thumb": "#CBD5E1",
+        "scrollbar_hover": "#94A3B8",
         "highlight_focus": "#DDF4FF",
         "highlight_selected": "#F0F9FF",
         "status_pass": "#16A34A",
@@ -103,6 +119,266 @@ THEMES: dict[str, dict[str, str]] = {
 }
 
 
+class ModernScrollbar(tk.Canvas):
+    """Minimal, modern, arrowless scrollbar with smooth rounded thumb and theme awareness."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        orient: str = "vertical",
+        command: Any = None,
+        width: int = 8,
+        **kwargs: Any,
+    ) -> None:
+        self.orient = orient
+        self.command = command
+        self.thickness = width
+        self.first = 0.0
+        self.last = 1.0
+        self._dragging = False
+        self._drag_start = 0
+        self._drag_first = 0.0
+        self._hovered = False
+
+        self.track_color = "#0B0F15"
+        self.thumb_color = "#283344"
+        self.hover_color = "#3E4C63"
+
+        if orient == "vertical":
+            super().__init__(parent, width=width, highlightthickness=0, bd=0, bg=self.track_color, **kwargs)
+        else:
+            super().__init__(parent, height=width, highlightthickness=0, bd=0, bg=self.track_color, **kwargs)
+
+        self.bind("<Configure>", lambda e: self._redraw())
+        self.bind("<Enter>", self._on_enter)
+        self.bind("<Leave>", self._on_leave)
+        self.bind("<Button-1>", self._on_press)
+        self.bind("<B1-Motion>", self._on_drag)
+        self.bind("<ButtonRelease-1>", self._on_release)
+        self.bind("<MouseWheel>", self._on_mousewheel)
+
+    def set(self, first: Any, last: Any) -> None:
+        try:
+            self.first = max(0.0, min(1.0, float(first)))
+            self.last = max(0.0, min(1.0, float(last)))
+        except (ValueError, TypeError):
+            return
+        self._redraw()
+
+    def set_colors(self, track: str, thumb: str, hover: str) -> None:
+        self.track_color = track
+        self.thumb_color = thumb
+        self.hover_color = hover
+        self.configure(bg=track)
+        self._redraw()
+
+    def _on_enter(self, event: Any) -> None:
+        self._hovered = True
+        self._redraw()
+
+    def _on_leave(self, event: Any) -> None:
+        self._hovered = False
+        self._redraw()
+
+    def _on_mousewheel(self, event: Any) -> None:
+        if not self.command:
+            return
+        delta = -1 if event.delta > 0 else 1
+        self.command("scroll", delta, "units")
+
+    def _on_press(self, event: Any) -> None:
+        if self.orient == "vertical":
+            total = self.winfo_height()
+            pos = event.y
+        else:
+            total = self.winfo_width()
+            pos = event.x
+
+        if total <= 0:
+            return
+
+        thumb_start = int(self.first * total)
+        thumb_end = int(self.last * total)
+        thumb_len = max(thumb_end - thumb_start, 18)
+
+        if thumb_start <= pos <= thumb_end:
+            self._dragging = True
+            self._drag_start = pos
+            self._drag_first = self.first
+        elif pos < thumb_start:
+            if self.command:
+                self.command("scroll", -1, "pages")
+        else:
+            if self.command:
+                self.command("scroll", 1, "pages")
+
+    def _on_drag(self, event: Any) -> None:
+        if not self._dragging or not self.command:
+            return
+
+        if self.orient == "vertical":
+            total = self.winfo_height()
+            pos = event.y
+        else:
+            total = self.winfo_width()
+            pos = event.x
+
+        if total <= 0:
+            return
+
+        delta = (pos - self._drag_start) / total
+        thumb_size = self.last - self.first
+        new_first = max(0.0, min(1.0 - thumb_size, self._drag_first + delta))
+        self.command("moveto", new_first)
+
+    def _on_release(self, event: Any) -> None:
+        self._dragging = False
+        self._redraw()
+
+    def _redraw(self) -> None:
+        self.delete("all")
+        if self.first <= 0.0 and self.last >= 1.0:
+            return
+
+        color = self.hover_color if (self._hovered or self._dragging) else self.thumb_color
+        margin = 1
+
+        if self.orient == "vertical":
+            w = self.winfo_width()
+            h = self.winfo_height()
+            if h <= 0 or w <= 0:
+                return
+            y0 = int(self.first * h)
+            y1 = int(self.last * h)
+            if y1 - y0 < 18:
+                y1 = min(h, y0 + 18)
+            r = max(1, (w - 2 * margin) // 2)
+            self.create_rectangle(margin, y0 + r, w - margin, y1 - r, fill=color, outline="")
+            self.create_oval(margin, y0, w - margin, y0 + 2 * r, fill=color, outline="")
+            self.create_oval(margin, y1 - 2 * r, w - margin, y1, fill=color, outline="")
+        else:
+            w = self.winfo_width()
+            h = self.winfo_height()
+            if w <= 0 or h <= 0:
+                return
+            x0 = int(self.first * w)
+            x1 = int(self.last * w)
+            if x1 - x0 < 18:
+                x1 = min(w, x0 + 18)
+            r = max(1, (h - 2 * margin) // 2)
+            self.create_rectangle(x0 + r, margin, x1 - r, h - margin, fill=color, outline="")
+            self.create_oval(x0, margin, x0 + 2 * r, h - margin, fill=color, outline="")
+            self.create_oval(x1 - 2 * r, margin, x1, h - margin, fill=color, outline="")
+
+
+class PlaceholderEntry(ttk.Entry):
+    """Modern input entry with non-destructive, muted placeholder support."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        placeholder: str = "",
+        textvariable: tk.StringVar | None = None,
+        style: str = "TEntry",
+        show: str = "",
+        width: int | None = None,
+        font: Any = None,
+        **kwargs: Any,
+    ) -> None:
+        self.placeholder = placeholder
+        self.user_var = textvariable if textvariable is not None else tk.StringVar()
+        self.orig_show = show
+        self._is_placeholder = False
+        self._updating = False
+
+        self.normal_fg = "#F8FAFC"
+        self.placeholder_fg = "#64748B"
+
+        kw: dict[str, Any] = {"style": style}
+        if width is not None:
+            kw["width"] = width
+        if font is not None:
+            kw["font"] = font
+        kw.update(kwargs)
+
+        super().__init__(parent, **kw)
+
+        val = self.user_var.get()
+        if val:
+            self._show_text(val)
+        elif self.placeholder:
+            self._show_placeholder()
+
+        self.bind("<FocusIn>", self._on_focus_in)
+        self.bind("<FocusOut>", self._on_focus_out)
+        self.bind("<KeyRelease>", self._on_key_release)
+        self.bind("<<Paste>>", lambda e: self.after(10, self._sync_to_var))
+        self.bind("<<Cut>>", lambda e: self.after(10, self._sync_to_var))
+        self.user_var.trace_add("write", self._on_var_changed)
+
+    def set_palette(self, normal_fg: str, placeholder_fg: str) -> None:
+        self.normal_fg = normal_fg
+        self.placeholder_fg = placeholder_fg
+        if self._is_placeholder:
+            self.configure(foreground=self.placeholder_fg)
+        else:
+            self.configure(foreground=self.normal_fg)
+
+    def _show_placeholder(self) -> None:
+        self._is_placeholder = True
+        self.delete(0, "end")
+        self.configure(show="", foreground=self.placeholder_fg)
+        self.insert(0, self.placeholder)
+
+    def _show_text(self, text: str) -> None:
+        self._is_placeholder = False
+        self.delete(0, "end")
+        self.configure(show=self.orig_show, foreground=self.normal_fg)
+        self.insert(0, text)
+
+    def _on_focus_in(self, event: Any = None) -> None:
+        if self._is_placeholder:
+            self.delete(0, "end")
+            self.configure(show=self.orig_show, foreground=self.normal_fg)
+            self._is_placeholder = False
+
+    def _on_focus_out(self, event: Any = None) -> None:
+        content = self.get()
+        if not content and self.placeholder:
+            self._updating = True
+            try:
+                self.user_var.set("")
+            finally:
+                self._updating = False
+            self._show_placeholder()
+        else:
+            self._sync_to_var()
+
+    def _on_key_release(self, event: Any = None) -> None:
+        if not self._is_placeholder:
+            self._sync_to_var()
+
+    def _sync_to_var(self) -> None:
+        self._updating = True
+        try:
+            self.user_var.set(self.get())
+        finally:
+            self._updating = False
+
+    def _on_var_changed(self, *_: Any) -> None:
+        if self._updating:
+            return
+        val = self.user_var.get()
+        if val:
+            self._show_text(val)
+        elif self.focus_get() != self and self.placeholder:
+            self._show_placeholder()
+        else:
+            self._is_placeholder = False
+            self.delete(0, "end")
+            self.configure(show=self.orig_show, foreground=self.normal_fg)
+
+
 class LineNumbers(tk.Canvas):
     """Clean, high-performance line number gutter for the Python script editor."""
 
@@ -110,10 +386,13 @@ class LineNumbers(tk.Canvas):
         super().__init__(parent, width=38, highlightthickness=0, bd=0, **kwargs)
         self.text_widget = text_widget
         self.fg_color = "#64748B"
+        self.border_color = "#222B38"
 
-    def set_colors(self, bg: str, fg: str) -> None:
+    def set_colors(self, bg: str, fg: str, border: str = "") -> None:
         self.configure(bg=bg)
         self.fg_color = fg
+        if border:
+            self.border_color = border
         self.redraw()
 
     def redraw(self, *args: Any) -> None:
@@ -126,7 +405,7 @@ class LineNumbers(tk.Canvas):
             y = dline[1]
             linenum = str(i).split(".")[0]
             self.create_text(
-                34,
+                32,
                 y + 2,
                 anchor="ne",
                 text=linenum,
@@ -134,6 +413,10 @@ class LineNumbers(tk.Canvas):
                 font=self.text_widget.cget("font"),
             )
             i = self.text_widget.index(f"{i}+1line")
+        # Subtle right border
+        h = self.winfo_height()
+        if h > 0:
+            self.create_line(37, 0, 37, h, fill=self.border_color)
 
 
 class PostBabyApp(tk.Tk):
@@ -225,10 +508,10 @@ class PostBabyApp(tk.Tk):
         style.configure("TLabel", background=t["bg"], foreground=t["text_primary"], font=("Segoe UI", 9))
 
         # Typography
-        style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"), foreground=t["text_primary"])
-        style.configure("Title.TLabel", font=("Segoe UI", 15, "bold"), foreground=t["text_primary"])
-        style.configure("Brand.TLabel", font=("Segoe UI", 22, "bold"), foreground=t["text_primary"])
-        style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground=t["text_secondary"])
+        style.configure("Header.TLabel", font=("Segoe UI", 11, "bold"), foreground=t["text_primary"])
+        style.configure("Title.TLabel", font=("Segoe UI", 14, "bold"), foreground=t["text_primary"])
+        style.configure("Brand.TLabel", font=("Segoe UI", 18, "bold"), foreground=t["text_primary"])
+        style.configure("Subtitle.TLabel", font=("Segoe UI", 9), foreground=t["text_secondary"])
         style.configure("Required.TLabel", font=("Segoe UI", 9, "bold"), foreground=t["text_primary"])
         style.configure("Saved.TLabel", font=("Segoe UI", 9, "bold"), foreground=t["status_pass"])
         style.configure("Unsaved.TLabel", font=("Segoe UI", 9, "bold"), foreground=t["status_error"])
@@ -238,32 +521,122 @@ class PostBabyApp(tk.Tk):
         style.configure("Sidebar.TLabel", background=t["sidebar_bg"], foreground=t["text_secondary"])
         style.configure("SidebarHeader.TLabel", background=t["sidebar_bg"], foreground=t["text_primary"], font=("Segoe UI", 10, "bold"))
 
-        # Card frames
+        # Card frames & panels
         style.configure("Card.TFrame", background=t["card_bg"], relief="flat")
-        style.configure("TLabelframe", background=t["card_bg"], bordercolor=t["card_border"], relief="solid", borderwidth=1, padding=8)
-        style.configure("TLabelframe.Label", background=t["card_bg"], font=("Segoe UI", 9, "bold"), foreground=t["accent"])
+        style.configure("Panel.TFrame", background=t["card_bg"])
+        style.configure(
+            "TLabelframe",
+            background=t["card_bg"],
+            bordercolor=t["card_border"],
+            relief="solid",
+            borderwidth=1,
+            padding=10,
+        )
+        style.configure(
+            "TLabelframe.Label",
+            background=t["card_bg"],
+            font=("Segoe UI", 9, "bold"),
+            foreground=t["accent"],
+        )
+
+        # Inputs
+        style.configure(
+            "TEntry",
+            fieldbackground=t["input_bg"],
+            foreground=t["input_fg"],
+            insertcolor=t["accent"],
+            bordercolor=t["input_border"],
+            lightcolor=t["input_border"],
+            darkcolor=t["input_border"],
+            padding=(7, 4),
+        )
+        style.map(
+            "TEntry",
+            fieldbackground=[("focus", t["input_bg"])],
+            bordercolor=[("focus", t["accent"])],
+            lightcolor=[("focus", t["accent"])],
+            darkcolor=[("focus", t["accent"])],
+        )
 
         # Buttons
-        style.configure("TButton", font=("Segoe UI", 9), padding=(8, 4), background=t["card_bg"], foreground=t["text_primary"], bordercolor=t["card_border"])
-        style.map("TButton",
-                  background=[("active", t["card_hover"]), ("disabled", t["bg"])],
-                  foreground=[("disabled", t["text_muted"])])
+        style.configure(
+            "TButton",
+            font=("Segoe UI", 9),
+            padding=(10, 5),
+            background=t["btn_secondary_bg"],
+            foreground=t["btn_secondary_fg"],
+            bordercolor=t["btn_secondary_border"],
+            relief="flat",
+        )
+        style.map(
+            "TButton",
+            background=[("active", t["card_hover"]), ("disabled", t["bg"])],
+            foreground=[("disabled", t["text_muted"])],
+            bordercolor=[("active", t["accent"])],
+        )
 
-        style.configure("Primary.TButton", font=("Segoe UI", 9, "bold"), padding=(10, 5), background=t["btn_primary_bg"], foreground=t["btn_primary_fg"])
-        style.map("Primary.TButton", background=[("active", t["accent_hover"])])
+        style.configure(
+            "Primary.TButton",
+            font=("Segoe UI", 9, "bold"),
+            padding=(12, 5),
+            background=t["btn_primary_bg"],
+            foreground=t["btn_primary_fg"],
+            bordercolor=t["btn_primary_bg"],
+            relief="flat",
+        )
+        style.map(
+            "Primary.TButton",
+            background=[("active", t["accent_hover"])],
+            bordercolor=[("active", t["accent_hover"])],
+        )
 
-        style.configure("Danger.TButton", font=("Segoe UI", 9, "bold"), padding=(8, 4), background=t["btn_danger_bg"], foreground=t["btn_danger_fg"])
-        style.map("Danger.TButton", background=[("active", "#DC2626")])
+        style.configure(
+            "Danger.TButton",
+            font=("Segoe UI", 9, "bold"),
+            padding=(10, 5),
+            background=t["btn_danger_bg"],
+            foreground=t["btn_danger_fg"],
+            bordercolor=t["btn_danger_bg"],
+            relief="flat",
+        )
+        style.map(
+            "Danger.TButton",
+            background=[("active", "#B91C1C")],
+            bordercolor=[("active", "#B91C1C")],
+        )
 
         style.configure("Icon.TButton", font=("Segoe UI", 10), padding=(4, 2), relief="flat")
 
         # Treeview
-        style.configure("Treeview", background=t["card_bg"], foreground=t["text_primary"], fieldbackground=t["card_bg"], font=("Segoe UI", 9), rowheight=26, borderwidth=0)
-        style.configure("Treeview.Heading", background=t["header_bg"], foreground=t["text_secondary"], font=("Segoe UI", 9, "bold"), padding=(6, 4), borderwidth=0)
-        style.map("Treeview", background=[("selected", t["active_bg"])], foreground=[("selected", t["text_primary"])])
+        style.configure(
+            "Treeview",
+            background=t["card_bg"],
+            foreground=t["text_primary"],
+            fieldbackground=t["card_bg"],
+            font=("Segoe UI", 9),
+            rowheight=26,
+            borderwidth=0,
+        )
+        style.configure(
+            "Treeview.Heading",
+            background=t["header_bg"],
+            foreground=t["text_secondary"],
+            font=("Segoe UI", 9, "bold"),
+            padding=(6, 4),
+            borderwidth=0,
+        )
+        style.map(
+            "Treeview",
+            background=[("selected", t["active_bg"])],
+            foreground=[("selected", t["text_primary"])],
+        )
 
         # Progress bar
-        style.configure("TProgressbar", thickness=6, background=t["accent"], troughcolor=t["card_bg"], borderwidth=0)
+        style.configure("TProgressbar", thickness=5, background=t["accent"], troughcolor=t["card_bg"], borderwidth=0)
+
+        # PanedWindow
+        style.configure("TPanedwindow", background=t["bg"])
+        style.configure("Sash", sashthickness=3, background=t["card_border"])
 
     def toggle_theme(self) -> None:
         new_mode = "light" if self.theme_mode == "dark" else "dark"
@@ -275,6 +648,26 @@ class PostBabyApp(tk.Tk):
         self.theme_mode = mode
         self.database.set_setting("theme", mode)
         self._setup_styles()
+        t = self._theme()
+
+        if hasattr(self, "placeholder_entries"):
+            for pe in self.placeholder_entries:
+                if pe.winfo_exists():
+                    pe.set_palette(t["input_fg"], t["input_placeholder"])
+
+        if hasattr(self, "editor_yscroll") and self.editor_yscroll.winfo_exists():
+            self.editor_yscroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        if hasattr(self, "editor_xscroll") and self.editor_xscroll.winfo_exists():
+            self.editor_xscroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        if hasattr(self, "tree_scroll") and self.tree_scroll.winfo_exists():
+            self.tree_scroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        if hasattr(self, "detail_scroll") and self.detail_scroll.winfo_exists():
+            self.detail_scroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        if hasattr(self, "projects_scrollbar") and self.projects_scrollbar.winfo_exists():
+            self.projects_scrollbar.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        if hasattr(self, "projects_canvas") and self.projects_canvas.winfo_exists():
+            self.projects_canvas.configure(bg=t["bg"])
+
         # Refresh active screen
         if hasattr(self, "editor") and self.editor.winfo_exists():
             self._apply_editor_theme()
@@ -289,7 +682,7 @@ class PostBabyApp(tk.Tk):
 
     def _apply_editor_theme(self) -> None:
         t = self._theme()
-        if hasattr(self, "editor"):
+        if hasattr(self, "editor") and self.editor.winfo_exists():
             self.editor.configure(
                 bg=t["editor_bg"],
                 fg=t["editor_fg"],
@@ -301,12 +694,12 @@ class PostBabyApp(tk.Tk):
             self.editor.tag_configure("selected_test", background=t["highlight_selected"])
             self.editor.tag_raise("focused_test", "selected_test")
 
-        if hasattr(self, "line_numbers"):
-            self.line_numbers.set_colors(t["gutter_bg"], t["gutter_fg"])
+        if hasattr(self, "line_numbers") and self.line_numbers.winfo_exists():
+            self.line_numbers.set_colors(t["gutter_bg"], t["gutter_fg"], t["card_border"])
 
     def _apply_details_theme(self) -> None:
         t = self._theme()
-        if hasattr(self, "details"):
+        if hasattr(self, "details") and self.details.winfo_exists():
             self.details.configure(
                 bg=t["editor_bg"],
                 fg=t["editor_fg"],
@@ -438,8 +831,8 @@ class PostBabyApp(tk.Tk):
         self.status.set(f"✓ Saved project: {name}")
         return True
 
-    def go_back(self) -> None:
-        if hasattr(self, "editor") and self.editor is not None and self.editor.winfo_exists():
+    def go_back(self, prompt: bool = True) -> None:
+        if prompt and hasattr(self, "editor") and self.editor is not None and self.editor.winfo_exists():
             if self.is_dirty():
                 choice = self._prompt_unsaved_changes()
                 if choice == "save":
@@ -487,8 +880,8 @@ class PostBabyApp(tk.Tk):
         self.wait_window(dlg)
         return choice[0]
 
-    def prompt_new_project(self) -> None:
-        if hasattr(self, "editor") and self.editor is not None and self.editor.winfo_exists() and self.is_dirty():
+    def prompt_new_project(self, prompt: bool = True) -> None:
+        if prompt and hasattr(self, "editor") and self.editor is not None and self.editor.winfo_exists() and self.is_dirty():
             choice = self._prompt_unsaved_changes()
             if choice == "save":
                 if not self.save_project():
@@ -610,8 +1003,8 @@ class PostBabyApp(tk.Tk):
             return True
         return False
 
-    def show_projects(self) -> None:
-        if hasattr(self, "editor") and self.editor is not None and self.editor.winfo_exists() and self.is_dirty():
+    def show_projects(self, prompt: bool = True) -> None:
+        if prompt and hasattr(self, "editor") and self.editor is not None and self.editor.winfo_exists() and self.is_dirty():
             choice = self._prompt_unsaved_changes()
             if choice == "save":
                 if not self.save_project():
@@ -644,17 +1037,18 @@ class PostBabyApp(tk.Tk):
             ttk.Button(empty_box, text="✨ Create First Project", style="Primary.TButton", command=self.prompt_new_project).pack()
             return
 
-        canvas = tk.Canvas(self._projects_root, borderwidth=0, highlightthickness=0, bg=t["bg"])
-        scrollbar = ttk.Scrollbar(self._projects_root, orient="vertical", command=canvas.yview)
-        list_frame = ttk.Frame(canvas)
+        self.projects_canvas = tk.Canvas(self._projects_root, borderwidth=0, highlightthickness=0, bg=t["bg"])
+        self.projects_scrollbar = ModernScrollbar(self._projects_root, orient="vertical", command=self.projects_canvas.yview, width=8)
+        self.projects_scrollbar.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        list_frame = ttk.Frame(self.projects_canvas)
 
-        list_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-        canvas_window = canvas.create_window((0, 0), window=list_frame, anchor="nw")
-        canvas.bind("<Configure>", lambda e: canvas.itemconfig(canvas_window, width=e.width))
-        canvas.configure(yscrollcommand=scrollbar.set)
+        list_frame.bind("<Configure>", lambda e: self.projects_canvas.configure(scrollregion=self.projects_canvas.bbox("all")))
+        canvas_window = self.projects_canvas.create_window((0, 0), window=list_frame, anchor="nw")
+        self.projects_canvas.bind("<Configure>", lambda e: self.projects_canvas.itemconfig(canvas_window, width=e.width))
+        self.projects_canvas.configure(yscrollcommand=self.projects_scrollbar.set)
 
-        canvas.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.projects_canvas.pack(side="left", fill="both", expand=True)
+        self.projects_scrollbar.pack(side="right", fill="y", padx=(2, 0))
 
         for p in projects:
             pid = p["id"]
@@ -663,7 +1057,7 @@ class PostBabyApp(tk.Tk):
             fmt_time = raw_time[:19].replace("T", " ") if raw_time else "Never"
             session_count = p["session_count"]
 
-            card = ttk.Frame(list_frame, style="TLabelframe", padding=(16, 12))
+            card = ttk.Frame(list_frame, style="Card.TFrame", padding=(16, 12))
             card.pack(fill="x", expand=True, pady=4, padx=4)
 
             left_card = ttk.Frame(card)
@@ -801,33 +1195,57 @@ class PostBabyApp(tk.Tk):
         ttk.Label(right_header, textvariable=self.status, font=("Segoe UI", 9), foreground=t["text_muted"]).pack(side="right", padx=(0, 10))
 
         # ── Environment Section ─────────────────────────────────────────────
-        env = ttk.LabelFrame(root, text=" Environment ", padding=10)
+        self.placeholder_entries = []
+        env = ttk.LabelFrame(root, text=" Environment ", padding=12)
         env.pack(fill="x", pady=(0, 6))
 
         base_frame = ttk.Frame(env)
-        base_frame.pack(fill="x", pady=(0, 4))
+        base_frame.pack(fill="x", pady=(0, 6))
         ttk.Label(base_frame, text="Base URL *", font=("Segoe UI", 9, "bold"), foreground=t["text_primary"]).pack(side="left", padx=(0, 8))
-        base_entry = ttk.Entry(base_frame, textvariable=self.env_vars["BASE_URL"])
+        base_entry = PlaceholderEntry(base_frame, placeholder="https://api.example.com", textvariable=self.env_vars["BASE_URL"])
+        base_entry.set_palette(t["input_fg"], t["input_placeholder"])
         base_entry.pack(side="left", fill="x", expand=True, padx=(0, 12))
+        self.placeholder_entries.append(base_entry)
         ttk.Label(base_frame, text="* Only Base URL is required", font=("Segoe UI", 8, "italic"), foreground=t["text_muted"]).pack(side="left")
 
         opts_grid = ttk.Frame(env)
         opts_grid.pack(fill="x")
 
         ttk.Label(opts_grid, text="Token").grid(row=0, column=0, sticky="w", pady=2)
-        ttk.Entry(opts_grid, textvariable=self.env_vars["TOKEN"], show="•", width=28).grid(row=0, column=1, sticky="ew", padx=(6, 16), pady=2)
+        token_entry = PlaceholderEntry(opts_grid, placeholder="Optional token", textvariable=self.env_vars["TOKEN"], show="•", width=26)
+        token_entry.set_palette(t["input_fg"], t["input_placeholder"])
+        token_entry.grid(row=0, column=1, sticky="ew", padx=(6, 16), pady=2)
+        self.placeholder_entries.append(token_entry)
+
         ttk.Label(opts_grid, text="API Key").grid(row=0, column=2, sticky="w", pady=2)
-        ttk.Entry(opts_grid, textvariable=self.env_vars["API_KEY"], show="•", width=28).grid(row=0, column=3, sticky="ew", padx=(6, 0), pady=2)
+        api_key_entry = PlaceholderEntry(opts_grid, placeholder="Optional API key", textvariable=self.env_vars["API_KEY"], show="•", width=26)
+        api_key_entry.set_palette(t["input_fg"], t["input_placeholder"])
+        api_key_entry.grid(row=0, column=3, sticky="ew", padx=(6, 0), pady=2)
+        self.placeholder_entries.append(api_key_entry)
 
         ttk.Label(opts_grid, text="Username").grid(row=1, column=0, sticky="w", pady=2)
-        ttk.Entry(opts_grid, textvariable=self.env_vars["USERNAME"], width=28).grid(row=1, column=1, sticky="ew", padx=(6, 16), pady=2)
+        user_entry = PlaceholderEntry(opts_grid, placeholder="e.g. admin", textvariable=self.env_vars["USERNAME"], width=26)
+        user_entry.set_palette(t["input_fg"], t["input_placeholder"])
+        user_entry.grid(row=1, column=1, sticky="ew", padx=(6, 16), pady=2)
+        self.placeholder_entries.append(user_entry)
+
         ttk.Label(opts_grid, text="Password").grid(row=1, column=2, sticky="w", pady=2)
-        ttk.Entry(opts_grid, textvariable=self.env_vars["PASSWORD"], show="•", width=28).grid(row=1, column=3, sticky="ew", padx=(6, 0), pady=2)
+        pass_entry = PlaceholderEntry(opts_grid, placeholder="Optional password", textvariable=self.env_vars["PASSWORD"], show="•", width=26)
+        pass_entry.set_palette(t["input_fg"], t["input_placeholder"])
+        pass_entry.grid(row=1, column=3, sticky="ew", padx=(6, 0), pady=2)
+        self.placeholder_entries.append(pass_entry)
 
         ttk.Label(opts_grid, text="Client ID").grid(row=2, column=0, sticky="w", pady=2)
-        ttk.Entry(opts_grid, textvariable=self.env_vars["CLIENT_ID"], width=28).grid(row=2, column=1, sticky="ew", padx=(6, 16), pady=2)
+        client_id_entry = PlaceholderEntry(opts_grid, placeholder="Optional client ID", textvariable=self.env_vars["CLIENT_ID"], width=26)
+        client_id_entry.set_palette(t["input_fg"], t["input_placeholder"])
+        client_id_entry.grid(row=2, column=1, sticky="ew", padx=(6, 16), pady=2)
+        self.placeholder_entries.append(client_id_entry)
+
         ttk.Label(opts_grid, text="Client Secret").grid(row=2, column=2, sticky="w", pady=2)
-        ttk.Entry(opts_grid, textvariable=self.env_vars["CLIENT_SECRET"], show="•", width=28).grid(row=2, column=3, sticky="ew", padx=(6, 0), pady=2)
+        secret_entry = PlaceholderEntry(opts_grid, placeholder="Optional client secret", textvariable=self.env_vars["CLIENT_SECRET"], show="•", width=26)
+        secret_entry.set_palette(t["input_fg"], t["input_placeholder"])
+        secret_entry.grid(row=2, column=3, sticky="ew", padx=(6, 0), pady=2)
+        self.placeholder_entries.append(secret_entry)
 
         opts_grid.columnconfigure(1, weight=1)
         opts_grid.columnconfigure(3, weight=1)
@@ -844,7 +1262,7 @@ class PostBabyApp(tk.Tk):
         vpanes.add(hpanes, weight=3)
 
         # Left: Python Test Script
-        script_box = ttk.LabelFrame(hpanes, text=" Python Test Script ", padding=6)
+        script_box = ttk.LabelFrame(hpanes, text=" Python Test Script ", padding=8)
         hpanes.add(script_box, weight=1)
 
         editor_frame = ttk.Frame(script_box)
@@ -861,26 +1279,30 @@ class PostBabyApp(tk.Tk):
             insertbackground=t["editor_insert"],
             selectbackground=t["highlight_focus"],
             selectforeground=t["text_primary"],
-            padx=6,
-            pady=4,
+            padx=8,
+            pady=6,
+            bd=0,
+            highlightthickness=0,
         )
         self.line_numbers = LineNumbers(editor_frame, self.editor)
-        self.line_numbers.set_colors(t["gutter_bg"], t["gutter_fg"])
+        self.line_numbers.set_colors(t["gutter_bg"], t["gutter_fg"], t["card_border"])
 
-        yscroll = ttk.Scrollbar(editor_frame, orient="vertical", command=self._on_y_scroll)
-        xscroll = ttk.Scrollbar(editor_frame, orient="horizontal", command=self.editor.xview)
+        self.editor_yscroll = ModernScrollbar(editor_frame, orient="vertical", command=self._on_y_scroll, width=8)
+        self.editor_xscroll = ModernScrollbar(editor_frame, orient="horizontal", command=self.editor.xview, width=8)
+        self.editor_yscroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        self.editor_xscroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
 
         def _on_editor_scroll(*args: Any) -> None:
-            yscroll.set(*args)
+            self.editor_yscroll.set(*args)
             if hasattr(self, "line_numbers"):
                 self.line_numbers.redraw()
 
-        self.editor.configure(yscrollcommand=_on_editor_scroll, xscrollcommand=xscroll.set)
+        self.editor.configure(yscrollcommand=_on_editor_scroll, xscrollcommand=self.editor_xscroll.set)
 
         self.line_numbers.grid(row=0, column=0, sticky="ns")
         self.editor.grid(row=0, column=1, sticky="nsew")
-        yscroll.grid(row=0, column=2, sticky="ns")
-        xscroll.grid(row=1, column=1, sticky="ew")
+        self.editor_yscroll.grid(row=0, column=2, sticky="ns", padx=(1, 0))
+        self.editor_xscroll.grid(row=1, column=1, sticky="ew", pady=(1, 0))
 
         editor_frame.columnconfigure(1, weight=1)
         editor_frame.rowconfigure(0, weight=1)
@@ -903,11 +1325,11 @@ class PostBabyApp(tk.Tk):
         self.editor.bind("<Configure>", lambda _: self.line_numbers.redraw())
 
         # Right: Test Cases
-        cases_box = ttk.LabelFrame(hpanes, text=" Test Cases ", padding=6)
+        cases_box = ttk.LabelFrame(hpanes, text=" Test Cases ", padding=8)
         hpanes.add(cases_box, weight=1)
 
         run_controls = ttk.Frame(cases_box)
-        run_controls.pack(fill="x", pady=(0, 4))
+        run_controls.pack(fill="x", pady=(0, 6))
         self.run_selected_button = ttk.Button(run_controls, text="▶ Run Selected", style="Primary.TButton", command=lambda: self.start_run(True))
         self.run_selected_button.pack(side="left", padx=(0, 4))
         self.run_all_button = ttk.Button(run_controls, text="▶ Run All", command=lambda: self.start_run(False))
@@ -916,16 +1338,40 @@ class PostBabyApp(tk.Tk):
         self.stop_button.pack(side="left", padx=4)
 
         select_controls = ttk.Frame(cases_box)
-        select_controls.pack(fill="x", pady=(2, 4))
+        select_controls.pack(fill="x", pady=(0, 4))
         ttk.Button(select_controls, text="Select All", command=lambda: self._select_all(True)).pack(side="left")
         ttk.Button(select_controls, text="Clear Selection", command=lambda: self._select_all(False)).pack(side="left", padx=4)
 
-        self.tree = ttk.Treeview(cases_box, columns=("test", "status", "duration"), show="headings", selectmode="browse")
-        for col, title, width in (("test", "Test", 260), ("status", "Status", 110), ("duration", "Duration", 70)):
-            self.tree.heading(col, text=title)
-            self.tree.column(col, width=width, anchor="w")
-        self.tree.pack(fill="both", expand=True, pady=(2, 4))
+        tree_frame = ttk.Frame(cases_box)
+        tree_frame.pack(fill="both", expand=True, pady=(2, 4))
+
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=("check", "id", "name", "status", "duration"),
+            show="headings",
+            selectmode="browse",
+        )
+        self.tree.heading("check", text="")
+        self.tree.heading("id", text="TC-ID")
+        self.tree.heading("name", text="Test Case")
+        self.tree.heading("status", text="Status")
+        self.tree.heading("duration", text="Duration")
+
+        self.tree.column("check", width=34, minwidth=34, stretch=False, anchor="center")
+        self.tree.column("id", width=105, minwidth=70, stretch=False, anchor="w")
+        self.tree.column("name", width=220, minwidth=140, stretch=True, anchor="w")
+        self.tree.column("status", width=95, minwidth=80, stretch=False, anchor="w")
+        self.tree.column("duration", width=65, minwidth=55, stretch=False, anchor="e")
+
+        self.tree_scroll = ModernScrollbar(tree_frame, orient="vertical", command=self.tree.yview, width=8)
+        self.tree_scroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        self.tree.configure(yscrollcommand=self.tree_scroll.set)
+
+        self.tree.pack(side="left", fill="both", expand=True)
+        self.tree_scroll.pack(side="right", fill="y", padx=(1, 0))
         self.tree.bind("<ButtonRelease-1>", self._toggle_or_details)
+        self.tree.bind("<space>", lambda e: self._toggle_focused_selection())
+        self.tree.bind("<Double-1>", lambda e: self._toggle_focused_selection())
 
         self.tree.tag_configure("PASS", foreground=t["status_pass"])
         self.tree.tag_configure("FAIL", foreground=t["status_fail"])
@@ -940,7 +1386,7 @@ class PostBabyApp(tk.Tk):
         ttk.Label(progress_box, textvariable=self.progress, font=("Segoe UI", 8), foreground=t["text_secondary"]).pack(anchor="w")
 
         # Bottom: Result Detail
-        results_box = ttk.LabelFrame(vpanes, text=" Result Detail ", padding=6)
+        results_box = ttk.LabelFrame(vpanes, text=" Result Detail ", padding=8)
         vpanes.add(results_box, weight=2)
 
         results_header = ttk.Frame(results_box)
@@ -958,13 +1404,16 @@ class PostBabyApp(tk.Tk):
             bg=t["editor_bg"],
             fg=t["editor_fg"],
             insertbackground=t["editor_insert"],
-            padx=8,
-            pady=6,
+            padx=10,
+            pady=8,
+            bd=0,
+            highlightthickness=0,
         )
-        detail_scroll = ttk.Scrollbar(detail_frame, command=self.details.yview)
-        self.details.configure(yscrollcommand=detail_scroll.set)
+        self.detail_scroll = ModernScrollbar(detail_frame, orient="vertical", command=self.details.yview, width=8)
+        self.detail_scroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        self.details.configure(yscrollcommand=self.detail_scroll.set)
         self.details.pack(side="left", fill="both", expand=True)
-        detail_scroll.pack(side="right", fill="y")
+        self.detail_scroll.pack(side="right", fill="y", padx=(1, 0))
 
         self._apply_details_theme()
 
@@ -1015,13 +1464,20 @@ class PostBabyApp(tk.Tk):
             self.tree.delete(item)
         for test in self.controller.state.tests:
             result = self.result_by_name.get(test.function_name)
-            selected = "☑" if test.function_name in self.controller.state.selected else "☐"
-            id_prefix = f"[{test.test_id}] " if test.test_id else ""
-            title = f"{selected}  {id_prefix}{test.display_name}".strip()
+            is_selected = test.function_name in self.controller.state.selected
+            check_mark = "☑" if is_selected else "☐"
+            test_id = test.test_id or "—"
+            display_name = test.display_name or test.function_name
             status_key = str(result.status) if result else "NOT_RUN"
             status = STATUS_MARK.get(status_key, status_key)
             duration = f"{result.duration_ms} ms" if result and result.duration_ms is not None else ""
-            self.tree.insert("", "end", iid=test.function_name, values=(title, status, duration), tags=(status_key,))
+            self.tree.insert(
+                "",
+                "end",
+                iid=test.function_name,
+                values=(check_mark, test_id, display_name, status, duration),
+                tags=(status_key,),
+            )
         self._update_summary()
         self._update_code_highlighting(self.focused_function, scroll_to_focus=False)
 
@@ -1051,7 +1507,18 @@ class PostBabyApp(tk.Tk):
                 if scroll_to_focus:
                     self.editor.see(f"{test.start_line}.0")
 
-    def _toggle_or_details(self, event) -> None:
+    def _toggle_focused_selection(self) -> None:
+        if not self.focused_function:
+            selection = self.tree.selection()
+            if selection:
+                self.focused_function = selection[0]
+        if self.focused_function:
+            is_now_selected = self.focused_function not in self.controller.state.selected
+            self.controller.state.set_selected(self.focused_function, is_now_selected)
+            self._render_tests()
+            self._update_code_highlighting(self.focused_function, scroll_to_focus=True)
+
+    def _toggle_or_details(self, event: Any) -> None:
         item = self.tree.identify_row(event.y)
         if not item:
             return
@@ -1290,11 +1757,20 @@ class PostBabyApp(tk.Tk):
         t = self._theme()
         window.configure(bg=t["bg"])
 
-        tree = ttk.Treeview(window, columns=("project", "progress", "status", "results"), show="headings")
+        hist_frame = ttk.Frame(window)
+        hist_frame.pack(fill="both", expand=True, padx=12, pady=12)
+
+        tree = ttk.Treeview(hist_frame, columns=("project", "progress", "status", "results"), show="headings")
         for key, title in (("project", "Project"), ("progress", "Progress"), ("status", "Status"), ("results", "Results")):
             tree.heading(key, text=title)
             tree.column(key, width=155)
-        tree.pack(fill="both", expand=True, padx=12, pady=12)
+
+        hist_scroll = ModernScrollbar(hist_frame, orient="vertical", command=tree.yview, width=8)
+        hist_scroll.set_colors(t["scrollbar_track"], t["scrollbar_thumb"], t["scrollbar_hover"])
+        tree.configure(yscrollcommand=hist_scroll.set)
+
+        tree.pack(side="left", fill="both", expand=True)
+        hist_scroll.pack(side="right", fill="y", padx=(1, 0))
 
         for row in self.database.session_history():
             tree.insert(
