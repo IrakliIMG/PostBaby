@@ -39,6 +39,8 @@ class TestCase:
     display_name: str
     test_id: Optional[str] = None
     line_number: int = 0
+    start_line: int = 0
+    end_line: int = 0
 
 
 @dataclass(frozen=True)

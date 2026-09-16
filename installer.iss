@@ -15,6 +15,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputBaseFilename=PostBabySetup
 OutputDir=dist
+SetupIconFile=pacifier.ico
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern

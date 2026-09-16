@@ -71,6 +71,32 @@ class Database:
         row = self.connection.execute("SELECT * FROM projects WHERE name=?", (name,)).fetchone()
         return Project(row["id"], row["name"], row["created_at"]) if row else self.create_project(name)
 
+    def delete_project(self, project_id: int) -> bool:
+        """Atomically delete a project and all its associated sessions, snapshots, runs, and results."""
+        with self.connection:
+            sessions = [
+                row["id"]
+                for row in self.connection.execute("SELECT id FROM sessions WHERE project_id=?", (project_id,)).fetchall()
+            ]
+            for session_id in sessions:
+                self.connection.execute("DELETE FROM test_results WHERE session_id=?", (session_id,))
+                self.connection.execute("DELETE FROM test_runs WHERE session_id=?", (session_id,))
+                self.connection.execute("DELETE FROM script_snapshots WHERE session_id=?", (session_id,))
+            self.connection.execute("DELETE FROM sessions WHERE project_id=?", (project_id,))
+            cursor = self.connection.execute("DELETE FROM projects WHERE id=?", (project_id,))
+            return cursor.rowcount > 0
+
+    def get_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        row = self.connection.execute("SELECT value FROM application_settings WHERE key=?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        self.connection.execute(
+            "INSERT INTO application_settings(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+            (key, str(value)),
+        )
+        self.connection.commit()
+
     def list_projects(self) -> list[sqlite3.Row]:
         return self.connection.execute(
             """SELECT p.id, p.name, p.created_at,

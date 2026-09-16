@@ -108,3 +108,63 @@ class ParserAndValidatorTests(unittest.TestCase):
         result = validate_script(source)
         self.assertTrue(result.valid, f"Expected safe os/pathlib script to be valid, got errors: {result.errors}")
         self.assertEqual([], result.errors)
+
+    def test_ast_parser_captures_accurate_start_and_end_lines(self):
+        source = (
+            "import json\n"
+            "\n"
+            "def test_one():\n"
+            "    x = 1\n"
+            "    assert x == 1\n"
+            "\n"
+            "def test_two():\n"
+            "    y = 2\n"
+            "    assert y == 2\n"
+        )
+        parsed = parse_script(source)
+        self.assertEqual(2, len(parsed.tests))
+
+        t1 = parsed.tests[0]
+        self.assertEqual("test_one", t1.function_name)
+        self.assertEqual(3, t1.start_line)
+        self.assertEqual(5, t1.end_line)
+        self.assertEqual(3, t1.line_number)
+
+        t2 = parsed.tests[1]
+        self.assertEqual("test_two", t2.function_name)
+        self.assertEqual(7, t2.start_line)
+        self.assertEqual(9, t2.end_line)
+        self.assertEqual(7, t2.line_number)
+
+    def test_ast_parser_includes_preceding_comments_in_start_line(self):
+        source = (
+            "# TC-AUTH-001\n"
+            "# Customer product statuses - successful request\n"
+            "def test_customer_product_statuses():\n"
+            "    res = 200\n"
+            "    assert res == 200\n"
+            "\n"
+            "# TC-AUTH-002\n"
+            "def test_another():\n"
+            "    assert True\n"
+        )
+        parsed = parse_script(source)
+        self.assertEqual(2, len(parsed.tests))
+
+        t1 = parsed.tests[0]
+        self.assertEqual("test_customer_product_statuses", t1.function_name)
+        self.assertEqual("TC-AUTH-001", t1.test_id)
+        self.assertEqual("Customer product statuses - successful request", t1.display_name)
+        # Preceding comments start on line 1, function def on line 3, body ends on line 5
+        self.assertEqual(1, t1.start_line)
+        self.assertEqual(5, t1.end_line)
+        self.assertEqual(3, t1.line_number)
+
+        t2 = parsed.tests[1]
+        self.assertEqual("test_another", t2.function_name)
+        self.assertEqual("TC-AUTH-002", t2.test_id)
+        # Preceding comment starts on line 7, function def on line 8, body ends on line 9
+        self.assertEqual(7, t2.start_line)
+        self.assertEqual(9, t2.end_line)
+        self.assertEqual(8, t2.line_number)
+

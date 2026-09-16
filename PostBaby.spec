@@ -55,6 +55,6 @@ analysis = Analysis(
 )
 pyz = PYZ(analysis.pure)
 exe = EXE(
-    pyz, analysis.scripts, [], exclude_binaries=True, name="PostBaby", console=False,
+    pyz, analysis.scripts, [], exclude_binaries=True, name="PostBaby", console=False, icon="pacifier.ico",
 )
 coll = COLLECT(exe, analysis.binaries, analysis.zipfiles, analysis.datas, name="PostBaby")

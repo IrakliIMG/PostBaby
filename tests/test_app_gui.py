@@ -272,3 +272,150 @@ class PostBabyBehaviorTests(unittest.TestCase):
         finally:
             app._close(prompt=False)
 
+    def test_code_highlighting_on_test_selection(self):
+        from postbaby.app import PostBabyApp
+        app = PostBabyApp(db_path=self.db_path)
+        app.withdraw()
+        try:
+            app._create_and_open_new_project("Highlighting Test")
+            source = (
+                "# TC-001\n"
+                "# Test One Description\n"
+                "def test_one():\n"
+                "    assert True\n"
+                "\n"
+                "# TC-002\n"
+                "def test_two():\n"
+                "    assert True\n"
+                "\n"
+                "def test_three():\n"
+                "    assert True\n"
+            )
+            app.editor.delete("1.0", "end")
+            app.editor.insert("1.0", source)
+            app.parse_script()
+
+            self.assertEqual(3, len(app.controller.state.tests))
+
+            # 1. Clear selection to test from a clean unselected state
+            app._select_all(False)
+            app.focused_function = None
+            app._update_code_highlighting()
+            self.assertEqual((), app.editor.tag_ranges("focused_test"))
+            self.assertEqual((), app.editor.tag_ranges("selected_test"))
+
+            # 2. Focus test_one -> primary highlight applied
+            app.focused_function = "test_one"
+            app._update_code_highlighting(app.focused_function)
+            focused_ranges = app.editor.tag_ranges("focused_test")
+            self.assertTrue(len(focused_ranges) >= 2)
+            # Starts at line 1 (includes # TC-001 comment)
+            self.assertEqual("1.0", str(focused_ranges[0]))
+
+            # 3. Multi-select: select test_two as well
+            app.controller.state.set_selected("test_two", True)
+            app._update_code_highlighting(app.focused_function)
+            focused_ranges = app.editor.tag_ranges("focused_test")
+            selected_ranges = app.editor.tag_ranges("selected_test")
+            self.assertTrue(len(focused_ranges) >= 2)
+            self.assertTrue(len(selected_ranges) >= 2)
+            self.assertEqual("1.0", str(focused_ranges[0]))
+            # test_two comment starts at line 6
+            self.assertEqual("6.0", str(selected_ranges[0]))
+
+            # 4. Unselect test_two
+            app.controller.state.set_selected("test_two", False)
+            app._update_code_highlighting(app.focused_function)
+            self.assertEqual((), app.editor.tag_ranges("selected_test"))
+            self.assertTrue(len(app.editor.tag_ranges("focused_test")) >= 2)
+        finally:
+            app._close(prompt=False)
+
+    def test_script_edit_reparses_and_updates_line_ranges(self):
+        from postbaby.app import PostBabyApp
+        app = PostBabyApp(db_path=self.db_path)
+        app.withdraw()
+        try:
+            app._create_and_open_new_project("Edit Reparse Test")
+            source = "def test_alpha():\n    assert True\n"
+            app.editor.delete("1.0", "end")
+            app.editor.insert("1.0", source)
+            app.parse_script()
+
+            t = app.controller.state.tests[0]
+            self.assertEqual(1, t.start_line)
+
+            # Insert 4 non-comment lines above the function
+            app.editor.insert("1.0", "a = 1\nb = 2\nc = 3\nd = 4\n")
+            app.parse_script()
+
+            t_updated = app.controller.state.tests[0]
+            self.assertEqual(5, t_updated.start_line)
+
+            app.focused_function = "test_alpha"
+            app._update_code_highlighting("test_alpha")
+            ranges = app.editor.tag_ranges("focused_test")
+            self.assertTrue(len(ranges) >= 2)
+            self.assertEqual("5.0", str(ranges[0]))
+        finally:
+            app._close(prompt=False)
+
+    def test_theme_toggle_and_persistence(self):
+        from postbaby.app import PostBabyApp
+        app = PostBabyApp(db_path=self.db_path)
+        app.withdraw()
+        try:
+            initial = app.theme_mode
+            self.assertIn(initial, ("dark", "light"))
+
+            # Toggle theme
+            app.toggle_theme()
+            new_theme = "light" if initial == "dark" else "dark"
+            self.assertEqual(new_theme, app.theme_mode)
+            self.assertEqual(new_theme, self.database.get_setting("theme"))
+
+            # Re-toggle
+            app.toggle_theme()
+            self.assertEqual(initial, app.theme_mode)
+            self.assertEqual(initial, self.database.get_setting("theme"))
+
+            # Set explicitly to light and close
+            app.set_theme("light")
+            self.assertEqual("light", self.database.get_setting("theme"))
+        finally:
+            app._close(prompt=False)
+
+        # Open new instance with same DB, verify light mode is loaded
+        reopened_app = PostBabyApp(db_path=self.db_path)
+        reopened_app.withdraw()
+        try:
+            self.assertEqual("light", reopened_app.theme_mode)
+        finally:
+            reopened_app._close(prompt=False)
+
+    def test_delete_project_functionality(self):
+        from postbaby.app import PostBabyApp
+        app = PostBabyApp(db_path=self.db_path)
+        app.withdraw()
+        try:
+            # Create two projects
+            p1 = self.database.create_project("Project Alpha")
+            p2 = self.database.create_project("Project Beta")
+
+            self.assertEqual(2, len(self.database.list_projects()))
+
+            # Delete Project Alpha directly
+            deleted = self.database.delete_project(p1.id)
+            self.assertTrue(deleted)
+
+            remaining = self.database.list_projects()
+            self.assertEqual(1, len(remaining))
+            self.assertEqual("Project Beta", remaining[0]["name"])
+
+            # Verify Project Beta remains completely functional
+            app.open_project(p2.id)
+            self.assertEqual("Project Beta", app.project_name.get())
+        finally:
+            app._close(prompt=False)
+
+

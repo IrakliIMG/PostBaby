@@ -31,13 +31,14 @@ def parse_script(source: str) -> ParseResult:
         elif isinstance(node, ast.ImportFrom):
             imports.append(node.module or "")
         elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
-            test_id, title = _metadata(lines, node.lineno)
+            test_id, title, start_line = _metadata(lines, node.lineno)
+            end_line = getattr(node, "end_lineno", node.lineno)
             display = title or node.name.removeprefix("test_").replace("_", " ").title()
-            tests.append(TestCase(node.name, display, test_id, node.lineno))
+            tests.append(TestCase(node.name, display, test_id, node.lineno, start_line, end_line))
     return ParseResult(tests, imports)
 
 
-def _metadata(lines: list[str], function_line: int) -> tuple[str | None, str | None]:
+def _metadata(lines: list[str], function_line: int) -> tuple[str | None, str | None, int]:
     comments: list[str] = []
     index = function_line - 2
     while index >= 0 and lines[index].strip().startswith("#"):
@@ -46,4 +47,6 @@ def _metadata(lines: list[str], function_line: int) -> tuple[str | None, str | N
     comments.reverse()
     test_id = next((value for value in comments if re.fullmatch(r"TC-[A-Z0-9-]+", value)), None)
     title = next((value for value in comments if value != test_id), None)
-    return test_id, title
+    comment_start = index + 2 if comments else function_line
+    return test_id, title, comment_start
+
