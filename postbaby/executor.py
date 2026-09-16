@@ -15,7 +15,71 @@ from typing import Any, Mapping
 from .environment import Environment, EnvironmentError
 from .models import TestCase, TestResult, TestStatus, utc_now
 from .security import SecretRedactor
-from .validator import ALLOWED_IMPORT_ROOTS, validate_script
+from .validator import ALLOWED_IMPORT_ROOTS, DANGEROUS_OS_ATTRIBUTES, is_allowed_import, validate_script
+
+
+class _SafeOsProxy:
+    """Restricted proxy for os module allowing safe environment/path queries while blocking dangerous system/fs operations."""
+
+    def __init__(self, real_os: Any) -> None:
+        self._real_os = real_os
+
+    def __getattr__(self, name: str) -> Any:
+        if name in DANGEROUS_OS_ATTRIBUTES:
+            raise PermissionError(f"os.{name}() is disabled in PostBaby for security.")
+        return getattr(self._real_os, name)
+
+    def __dir__(self) -> list[str]:
+        return [attr for attr in dir(self._real_os) if attr not in DANGEROUS_OS_ATTRIBUTES]
+
+
+def _wrap_path_class(cls: type) -> type:
+    class SafePath(cls):
+        def unlink(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.unlink() is disabled in PostBaby for security.")
+
+        def write_text(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.write_text() is disabled in PostBaby for security.")
+
+        def write_bytes(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.write_bytes() is disabled in PostBaby for security.")
+
+        def mkdir(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.mkdir() is disabled in PostBaby for security.")
+
+        def rmdir(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.rmdir() is disabled in PostBaby for security.")
+
+        def rename(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.rename() is disabled in PostBaby for security.")
+
+        def replace(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.replace() is disabled in PostBaby for security.")
+
+        def touch(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.touch() is disabled in PostBaby for security.")
+
+        def chmod(self, *args: Any, **kwargs: Any) -> Any:
+            raise PermissionError("Path.chmod() is disabled in PostBaby for security.")
+
+    SafePath.__name__ = cls.__name__
+    return SafePath
+
+
+class _SafePathlibProxy:
+    """Restricted proxy for pathlib module disabling mutating filesystem methods on Path."""
+
+    def __init__(self, real_pathlib: Any) -> None:
+        self._real_pathlib = real_pathlib
+
+    def __getattr__(self, name: str) -> Any:
+        attr = getattr(self._real_pathlib, name)
+        if name in ("Path", "PosixPath", "WindowsPath") and isinstance(attr, type):
+            return _wrap_path_class(attr)
+        return attr
+
+    def __dir__(self) -> list[str]:
+        return dir(self._real_pathlib)
 
 
 @dataclass(frozen=True)
@@ -103,9 +167,16 @@ class TestExecutor:
         normal_import = builtins.__import__
         def importer(name: str, *args: Any, **kwargs: Any) -> Any:
             root = name.split(".")[0]
-            if root not in ALLOWED_IMPORT_ROOTS:
+            if not is_allowed_import(root):
                 raise ImportError(f"Unsupported import: {name}")
-            return recorder.module() if name == "requests" else normal_import(name, *args, **kwargs)
+            if name == "requests":
+                return recorder.module()
+            module = normal_import(name, *args, **kwargs)
+            if root == "os":
+                return _SafeOsProxy(module)
+            if root == "pathlib":
+                return _SafePathlibProxy(module)
+            return module
         safe_builtins["__import__"] = importer
         namespace: dict[str, Any] = {"__builtins__": safe_builtins, "__name__": "__postbaby_test__"}
         exec(compile(ast.Module(body=selected, type_ignores=[]), "<postbaby-script>", "exec"), namespace)

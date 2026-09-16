@@ -1,7 +1,7 @@
 ; Inno Setup script for PostBaby Windows Desktop API Test Runner
 
 #define MyAppName "PostBaby"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "2.0.0"
 #define MyAppPublisher "PostBaby"
 #define MyAppExeName "PostBaby.exe"
 

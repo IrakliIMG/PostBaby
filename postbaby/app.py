@@ -24,8 +24,10 @@ class PostBabyApp(tk.Tk):
     def __init__(self, db_path: str | Path | None = None) -> None:
         super().__init__()
         self.title("PostBaby 🍼")
-        self.geometry("1120x780")
-        self.minsize(850, 620)
+        self.geometry("1140x800")
+        self.minsize(880, 640)
+        self._setup_styles()
+
         self.database = Database(db_path or default_database_path())
         self.controller = ApplicationController(self.database)
         self.runner = TestRunner(self.database)
@@ -34,7 +36,10 @@ class PostBabyApp(tk.Tk):
         self.current_session_id: int | None = None
         self.resume_session_id: int | None = None
         self.running = False
-        self.env_vars = {key: tk.StringVar() for key in ("BASE_URL", "USERNAME", "PASSWORD", "TOKEN", "API_KEY", "CLIENT_ID", "CLIENT_SECRET")}
+        self.env_vars = {
+            key: tk.StringVar()
+            for key in ("BASE_URL", "USERNAME", "PASSWORD", "TOKEN", "API_KEY", "CLIENT_ID", "CLIENT_SECRET")
+        }
         self.project_name = tk.StringVar(value="My API Project")
         self.save_status = tk.StringVar(value="✓ Saved")
         self.status = tk.StringVar(value="● Ready")
@@ -50,6 +55,34 @@ class PostBabyApp(tk.Tk):
         self._drain_job = self.after(80, self._drain_events)
         self.protocol("WM_DELETE_WINDOW", self._close)
 
+    def _setup_styles(self) -> None:
+        style = ttk.Style(self)
+        try:
+            style.theme_use("clam")
+        except Exception:
+            pass
+
+        style.configure(".", font=("Segoe UI", 9))
+        style.configure("TLabel", font=("Segoe UI", 9))
+        style.configure("Header.TLabel", font=("Segoe UI", 12, "bold"))
+        style.configure("Title.TLabel", font=("Segoe UI", 15, "bold"))
+        style.configure("Brand.TLabel", font=("Segoe UI", 22, "bold"))
+        style.configure("Subtitle.TLabel", font=("Segoe UI", 10), foreground="#64748B")
+        style.configure("Required.TLabel", font=("Segoe UI", 9, "bold"), foreground="#0F172A")
+        style.configure("Saved.TLabel", font=("Segoe UI", 9, "bold"), foreground="#16A34A")
+        style.configure("Unsaved.TLabel", font=("Segoe UI", 9, "bold"), foreground="#D97706")
+
+        style.configure("TButton", font=("Segoe UI", 9), padding=(8, 4))
+        style.configure("Primary.TButton", font=("Segoe UI", 9, "bold"), padding=(10, 5))
+        style.configure("Danger.TButton", font=("Segoe UI", 9), padding=(8, 4))
+
+        style.configure("TLabelframe", padding=8)
+        style.configure("TLabelframe.Label", font=("Segoe UI", 9, "bold"), foreground="#334155")
+
+        style.configure("Treeview", font=("Segoe UI", 9), rowheight=24)
+        style.configure("Treeview.Heading", font=("Segoe UI", 9, "bold"), padding=(4, 4))
+        style.configure("TProgressbar", thickness=8)
+
     def _menu(self) -> None:
         menu = tk.Menu(self)
         file_menu = tk.Menu(menu, tearoff=False)
@@ -62,8 +95,9 @@ class PostBabyApp(tk.Tk):
         file_menu.add_command(label="Exit", command=self._close)
         tools = tk.Menu(menu, tearoff=False)
         tools.add_command(label="Validate Script", command=self.parse_script)
-        tools.add_command(label="Copy LLM Message", command=self.copy_llm_message)
-        menu.add_cascade(label="File", menu=file_menu); menu.add_cascade(label="Tools", menu=tools)
+        tools.add_command(label="Copy Script Contract", command=self.copy_llm_message)
+        menu.add_cascade(label="File", menu=file_menu)
+        menu.add_cascade(label="Tools", menu=tools)
         self.config(menu=menu)
 
     def _clear(self) -> None:
@@ -93,7 +127,7 @@ class PostBabyApp(tk.Tk):
 
     def _on_modified(self, *args) -> None:
         if self.is_dirty():
-            self.save_status.set("● Unsaved")
+            self.save_status.set("● Unsaved changes")
         else:
             self.save_status.set("✓ Saved")
 
@@ -143,7 +177,7 @@ class PostBabyApp(tk.Tk):
     def _prompt_unsaved_changes(self) -> str:
         dlg = tk.Toplevel(self)
         dlg.title("Unsaved Changes")
-        dlg.geometry("380x135")
+        dlg.geometry("400x145")
         dlg.resizable(False, False)
         dlg.transient(self)
         dlg.grab_set()
@@ -154,16 +188,17 @@ class PostBabyApp(tk.Tk):
             choice[0] = action
             dlg.destroy()
 
-        content = ttk.Frame(dlg, padding=(20, 16, 20, 16))
+        content = ttk.Frame(dlg, padding=(24, 20, 24, 20))
         content.pack(fill="both", expand=True)
 
-        ttk.Label(content, text="You have unsaved changes.", font=("Segoe UI", 11)).pack(anchor="w", pady=(0, 16))
+        ttk.Label(content, text="You have unsaved changes.", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        ttk.Label(content, text="Save before returning to the welcome screen?", font=("Segoe UI", 9), foreground="#64748B").pack(anchor="w", pady=(0, 16))
 
         btn_box = ttk.Frame(content)
         btn_box.pack(fill="x")
 
-        ttk.Button(btn_box, text="Save & Back", command=lambda: on_action("save")).pack(side="right", padx=(5, 0))
-        ttk.Button(btn_box, text="Cancel", command=lambda: on_action("cancel")).pack(side="right", padx=5)
+        ttk.Button(btn_box, text="Save & Back", command=lambda: on_action("save")).pack(side="right", padx=(6, 0))
+        ttk.Button(btn_box, text="Cancel", command=lambda: on_action("cancel")).pack(side="right", padx=6)
         ttk.Button(btn_box, text="Discard", command=lambda: on_action("discard")).pack(side="right")
 
         dlg.protocol("WM_DELETE_WINDOW", lambda: on_action("cancel"))
@@ -181,17 +216,17 @@ class PostBabyApp(tk.Tk):
 
         dlg = tk.Toplevel(self)
         dlg.title("New Project")
-        dlg.geometry("380x150")
+        dlg.geometry("400x155")
         dlg.resizable(False, False)
         dlg.transient(self)
         dlg.grab_set()
 
-        content = ttk.Frame(dlg, padding=(20, 16, 20, 16))
+        content = ttk.Frame(dlg, padding=(24, 20, 24, 20))
         content.pack(fill="both", expand=True)
 
         ttk.Label(content, text="Project Name", font=("Segoe UI", 10, "bold")).pack(anchor="w")
         name_var = tk.StringVar(value="")
-        entry = ttk.Entry(content, textvariable=name_var, width=36, font=("Segoe UI", 10))
+        entry = ttk.Entry(content, textvariable=name_var, font=("Segoe UI", 10))
         entry.pack(fill="x", pady=(6, 16))
         entry.focus_set()
 
@@ -221,13 +256,15 @@ class PostBabyApp(tk.Tk):
         self.resume_session_id = None
         self.result_by_name.clear()
 
-        source = self.database.latest_project_script(project.id)
-        self.controller.state.source = source if source is not None else ""
-
+        # New projects start with empty script and clean save state
+        self.controller.state.source = ""
         self.controller.state.tests = []
         self.controller.state.selected = set()
+
         self.show_runner()
         self.save_project()
+        self._mark_clean()
+        self.save_status.set("✓ Saved")
         self.status.set(f"● Project: {project.name}")
 
     def new_project(self) -> None:
@@ -243,13 +280,13 @@ class PostBabyApp(tk.Tk):
                 return
         self._clear()
 
-        root = ttk.Frame(self, padding=20)
+        root = ttk.Frame(self, padding=24)
         root.pack(fill="both", expand=True)
 
         top_bar = ttk.Frame(root)
         top_bar.pack(fill="x", pady=(0, 16))
         ttk.Button(top_bar, text="← Back", command=self.show_welcome).pack(side="left")
-        ttk.Label(top_bar, text="📁 Your Projects", font=("Segoe UI", 16, "bold")).pack(side="left", padx=(14, 0))
+        ttk.Label(top_bar, text="📁 My Projects", font=("Segoe UI", 15, "bold")).pack(side="left", padx=(14, 0))
         ttk.Button(top_bar, text="✨ New Project", command=self.prompt_new_project).pack(side="right")
 
         projects = self.database.list_projects()
@@ -257,7 +294,7 @@ class PostBabyApp(tk.Tk):
         if not projects:
             empty_box = ttk.Frame(root, padding=40)
             empty_box.pack(expand=True)
-            ttk.Label(empty_box, text="No projects found.", font=("Segoe UI", 12, "italic")).pack(pady=(0, 12))
+            ttk.Label(empty_box, text="No projects found.", font=("Segoe UI", 12, "italic"), foreground="#64748B").pack(pady=(0, 12))
             ttk.Button(empty_box, text="✨ Create First Project", command=self.prompt_new_project).pack()
             return
 
@@ -265,11 +302,7 @@ class PostBabyApp(tk.Tk):
         scrollbar = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
         list_frame = ttk.Frame(canvas)
 
-        list_frame.bind(
-            "<Configure>",
-            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-        )
-
+        list_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
         canvas.create_window((0, 0), window=list_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
 
@@ -284,16 +317,16 @@ class PostBabyApp(tk.Tk):
             session_count = p["session_count"]
 
             card = ttk.LabelFrame(list_frame, padding=(16, 12))
-            card.pack(fill="x", expand=True, pady=6, padx=4)
+            card.pack(fill="x", expand=True, pady=4, padx=4)
 
             left_card = ttk.Frame(card)
             left_card.pack(side="left", fill="both", expand=True)
 
-            ttk.Label(left_card, text=name, font=("Segoe UI", 13, "bold")).pack(anchor="w")
+            ttk.Label(left_card, text=name, font=("Segoe UI", 12, "bold")).pack(anchor="w")
             info_text = f"Last modified: {fmt_time}"
             if session_count:
                 info_text += f"   •   {session_count} session{'s' if session_count != 1 else ''}"
-            ttk.Label(left_card, text=info_text, font=("Segoe UI", 9), foreground="#6c757d").pack(anchor="w", pady=(3, 0))
+            ttk.Label(left_card, text=info_text, font=("Segoe UI", 9), foreground="#64748B").pack(anchor="w", pady=(3, 0))
 
             right_card = ttk.Frame(card)
             right_card.pack(side="right", padx=(12, 0))
@@ -343,55 +376,103 @@ class PostBabyApp(tk.Tk):
         self._clear()
         panel = ttk.Frame(self, padding=40)
         panel.place(relx=.5, rely=.46, anchor="center")
-        ttk.Label(panel, text="🍼", font=("Segoe UI Emoji", 44)).pack()
-        ttk.Label(panel, text="POSTBABY", font=("Segoe UI", 26, "bold")).pack(pady=(10, 4))
-        ttk.Label(panel, text="Meet your new testing buddy.\n\nPostBaby runs your API tests.\nYour LLM writes them.", justify="center").pack(pady=8)
-        
+
+        ttk.Label(panel, text="🍼", font=("Segoe UI Emoji", 40)).pack()
+        ttk.Label(panel, text="POSTBABY", font=("Segoe UI", 24, "bold")).pack(pady=(6, 2))
+        ttk.Label(panel, text="Lightweight API Test Runner", font=("Segoe UI", 11), foreground="#64748B").pack(pady=(0, 24))
+
         has_projects = bool(self.database.list_projects())
+        btn_box = ttk.Frame(panel)
+        btn_box.pack(fill="x")
+
+        ttk.Button(btn_box, text="✨  New Project", command=self.prompt_new_project, width=28).pack(pady=4)
         if has_projects:
-            ttk.Label(panel, text="Existing projects found.", font=("Segoe UI", 10, "italic")).pack(pady=(6, 12))
-            ttk.Button(panel, text="📁  OPEN EXISTING PROJECT", command=self.show_projects).pack(fill="x", pady=4)
-            ttk.Button(panel, text="✨  NEW PROJECT", command=self.prompt_new_project).pack(fill="x", pady=4)
-            ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x", pady=4)
-        else:
-            ttk.Button(panel, text="✨  NEW PROJECT", command=self.prompt_new_project).pack(fill="x", pady=(18, 7))
-            ttk.Button(panel, text="📋  COPY MESSAGE", command=self.copy_llm_message).pack(fill="x")
+            ttk.Button(btn_box, text="📁  Open Existing Project", command=self.show_projects, width=28).pack(pady=4)
+        ttk.Button(btn_box, text="📋  Copy Script Contract", command=self.copy_llm_message, width=28).pack(pady=4)
 
     def show_runner(self) -> None:
         self._clear()
-        root = ttk.Frame(self, padding=12); root.pack(fill="both", expand=True)
-        header = ttk.Frame(root); header.pack(fill="x")
+        root = ttk.Frame(self, padding=12)
+        root.pack(fill="both", expand=True)
 
-        left_header = ttk.Frame(header); left_header.pack(side="left")
-        ttk.Button(left_header, text="← Back", command=self.go_back).pack(side="left", padx=(0, 12))
-        ttk.Label(left_header, text="Project:", font=("Segoe UI", 11, "bold")).pack(side="left", padx=(0, 6))
-        ttk.Label(left_header, textvariable=self.project_name, font=("Segoe UI", 12, "bold"), foreground="#0d6efd").pack(side="left")
+        # ── Header ──────────────────────────────────────────────────────────
+        header = ttk.Frame(root)
+        header.pack(fill="x", pady=(0, 8))
 
-        right_header = ttk.Frame(header); right_header.pack(side="right")
-        ttk.Label(right_header, textvariable=self.save_status, font=("Segoe UI", 10)).pack(side="left", padx=(0, 8))
+        left_header = ttk.Frame(header)
+        left_header.pack(side="left")
+        ttk.Button(left_header, text="← Back", command=self.go_back).pack(side="left", padx=(0, 10))
+        ttk.Label(left_header, text="Project:", font=("Segoe UI", 10, "bold"), foreground="#475569").pack(side="left", padx=(0, 6))
+        ttk.Label(left_header, textvariable=self.project_name, font=("Segoe UI", 12, "bold"), foreground="#0284C7").pack(side="left")
+
+        right_header = ttk.Frame(header)
+        right_header.pack(side="right")
+        ttk.Label(right_header, textvariable=self.save_status, font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 10))
         ttk.Button(right_header, text="💾 Save", command=self.save_project).pack(side="left", padx=(0, 6))
         ttk.Button(right_header, text="📋 Copy Contract", command=self.copy_llm_message).pack(side="left", padx=(0, 10))
-        ttk.Label(right_header, textvariable=self.status, font=("Segoe UI", 9)).pack(side="left")
+        ttk.Label(right_header, textvariable=self.status, font=("Segoe UI", 9), foreground="#64748B").pack(side="left")
 
-        env = ttk.LabelFrame(root, text=" Environment ", padding=8); env.pack(fill="x", pady=(10, 7))
-        ttk.Label(env, text="Project name").grid(row=0, column=0, sticky="w"); ttk.Entry(env, textvariable=self.project_name, width=32).grid(row=0, column=1, sticky="ew", padx=(6, 16))
-        names = [("Base URL", "BASE_URL", False), ("Username", "USERNAME", False), ("Password", "PASSWORD", True), ("Token", "TOKEN", True), ("API Key", "API_KEY", True), ("Client ID", "CLIENT_ID", False), ("Client Secret", "CLIENT_SECRET", True)]
-        for i, (label, key, secret) in enumerate(names, start=1):
-            col, row = (0, i) if i <= 4 else (2, i - 4)
-            ttk.Label(env, text=label).grid(row=row, column=col, sticky="w", pady=2)
-            ttk.Entry(env, textvariable=self.env_vars[key], show="•" if secret else "", width=32).grid(row=row, column=col + 1, sticky="ew", padx=(6, 16), pady=2)
-        env.columnconfigure(1, weight=1); env.columnconfigure(3, weight=1)
+        # ── Environment Section ─────────────────────────────────────────────
+        env = ttk.LabelFrame(root, text=" Environment ", padding=10)
+        env.pack(fill="x", pady=(0, 6))
 
-        script_box = ttk.LabelFrame(root, text=" Python Test Script ", padding=6); script_box.pack(fill="both", expand=True, pady=5)
-        self.editor = tk.Text(script_box, height=12, wrap="none", font=("Consolas", 10), undo=True)
-        yscroll = ttk.Scrollbar(script_box, orient="vertical", command=self.editor.yview); xscroll = ttk.Scrollbar(script_box, orient="horizontal", command=self.editor.xview)
+        base_frame = ttk.Frame(env)
+        base_frame.pack(fill="x", pady=(0, 4))
+        ttk.Label(base_frame, text="Base URL *", font=("Segoe UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        ttk.Entry(base_frame, textvariable=self.env_vars["BASE_URL"]).pack(side="left", fill="x", expand=True, padx=(0, 12))
+        ttk.Label(base_frame, text="* Only Base URL is required", font=("Segoe UI", 8, "italic"), foreground="#64748B").pack(side="left")
+
+        opts_grid = ttk.Frame(env)
+        opts_grid.pack(fill="x")
+
+        ttk.Label(opts_grid, text="Token").grid(row=0, column=0, sticky="w", pady=2)
+        ttk.Entry(opts_grid, textvariable=self.env_vars["TOKEN"], show="•", width=28).grid(row=0, column=1, sticky="ew", padx=(6, 16), pady=2)
+        ttk.Label(opts_grid, text="API Key").grid(row=0, column=2, sticky="w", pady=2)
+        ttk.Entry(opts_grid, textvariable=self.env_vars["API_KEY"], show="•", width=28).grid(row=0, column=3, sticky="ew", padx=(6, 0), pady=2)
+
+        ttk.Label(opts_grid, text="Username").grid(row=1, column=0, sticky="w", pady=2)
+        ttk.Entry(opts_grid, textvariable=self.env_vars["USERNAME"], width=28).grid(row=1, column=1, sticky="ew", padx=(6, 16), pady=2)
+        ttk.Label(opts_grid, text="Password").grid(row=1, column=2, sticky="w", pady=2)
+        ttk.Entry(opts_grid, textvariable=self.env_vars["PASSWORD"], show="•", width=28).grid(row=1, column=3, sticky="ew", padx=(6, 0), pady=2)
+
+        ttk.Label(opts_grid, text="Client ID").grid(row=2, column=0, sticky="w", pady=2)
+        ttk.Entry(opts_grid, textvariable=self.env_vars["CLIENT_ID"], width=28).grid(row=2, column=1, sticky="ew", padx=(6, 16), pady=2)
+        ttk.Label(opts_grid, text="Client Secret").grid(row=2, column=2, sticky="w", pady=2)
+        ttk.Entry(opts_grid, textvariable=self.env_vars["CLIENT_SECRET"], show="•", width=28).grid(row=2, column=3, sticky="ew", padx=(6, 0), pady=2)
+
+        opts_grid.columnconfigure(1, weight=1)
+        opts_grid.columnconfigure(3, weight=1)
+
+        # ── Main Resizable Workspace ────────────────────────────────────────
+        vpanes = ttk.PanedWindow(root, orient="vertical")
+        vpanes.pack(fill="both", expand=True, pady=4)
+
+        hpanes = ttk.PanedWindow(vpanes, orient="horizontal")
+        vpanes.add(hpanes, weight=3)
+
+        # Left: Python Test Script
+        script_box = ttk.LabelFrame(hpanes, text=" Python Test Script ", padding=6)
+        hpanes.add(script_box, weight=1)
+
+        editor_frame = ttk.Frame(script_box)
+        editor_frame.pack(fill="both", expand=True)
+
+        self.editor = tk.Text(editor_frame, height=12, wrap="none", font=("Consolas", 10), undo=True)
+        yscroll = ttk.Scrollbar(editor_frame, orient="vertical", command=self.editor.yview)
+        xscroll = ttk.Scrollbar(editor_frame, orient="horizontal", command=self.editor.xview)
         self.editor.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
-        self.editor.grid(row=0, column=0, sticky="nsew"); yscroll.grid(row=0, column=1, sticky="ns"); xscroll.grid(row=1, column=0, sticky="ew")
-        script_box.columnconfigure(0, weight=1); script_box.rowconfigure(0, weight=1)
 
-        script_actions = ttk.Frame(script_box); script_actions.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(4, 0))
-        self.parse_button = ttk.Button(script_actions, text="Parse Tests", command=self.parse_script); self.parse_button.pack(side="left")
-        ttk.Button(script_actions, text="Clear", command=lambda: self.editor.delete("1.0", "end")).pack(side="left", padx=5)
+        self.editor.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+        editor_frame.columnconfigure(0, weight=1)
+        editor_frame.rowconfigure(0, weight=1)
+
+        script_actions = ttk.Frame(script_box)
+        script_actions.pack(fill="x", pady=(6, 0))
+        self.parse_button = ttk.Button(script_actions, text="Parse Tests", command=self.parse_script)
+        self.parse_button.pack(side="left")
+        ttk.Button(script_actions, text="Clear", command=lambda: self.editor.delete("1.0", "end")).pack(side="left", padx=6)
 
         if self.controller.state.source:
             self.editor.insert("1.0", self.controller.state.source)
@@ -400,42 +481,79 @@ class PostBabyApp(tk.Tk):
         self.editor.bind("<KeyRelease>", lambda _: self._on_modified())
         self.editor.bind("<<Modified>>", self._on_text_modified)
 
-        self.bar = ttk.Progressbar(root, mode="determinate"); self.bar.pack(fill="x", pady=(2, 0))
-        ttk.Label(root, textvariable=self.progress).pack(anchor="w")
+        # Right: Test Cases
+        cases_box = ttk.LabelFrame(hpanes, text=" Test Cases ", padding=6)
+        hpanes.add(cases_box, weight=1)
 
-        panes = ttk.PanedWindow(root, orient="horizontal"); panes.pack(fill="both", expand=True, pady=6)
-        left = ttk.LabelFrame(panes, text=" Test Cases ", padding=5); right = ttk.LabelFrame(panes, text=" Result Details ", padding=5); panes.add(left, weight=1); panes.add(right, weight=1)
+        run_controls = ttk.Frame(cases_box)
+        run_controls.pack(fill="x", pady=(0, 4))
+        self.run_selected_button = ttk.Button(run_controls, text="▶ Run Selected", command=lambda: self.start_run(True))
+        self.run_selected_button.pack(side="left", padx=(0, 4))
+        self.run_all_button = ttk.Button(run_controls, text="▶ Run All", command=lambda: self.start_run(False))
+        self.run_all_button.pack(side="left", padx=4)
+        self.stop_button = ttk.Button(run_controls, text="■ Stop", command=self.stop_run, state="disabled")
+        self.stop_button.pack(side="left", padx=4)
 
-        left_header_frame = ttk.Frame(left); left_header_frame.pack(fill="x", pady=(0, 4))
-        run_controls = ttk.Frame(left_header_frame); run_controls.pack(fill="x", pady=(0, 2))
-        self.run_selected_button = ttk.Button(run_controls, text="▶ Run Selected", command=lambda: self.start_run(True)); self.run_selected_button.pack(side="left", padx=(0, 4))
-        self.run_all_button = ttk.Button(run_controls, text="▶ Run All", command=lambda: self.start_run(False)); self.run_all_button.pack(side="left", padx=4)
-        self.stop_button = ttk.Button(run_controls, text="■ Stop", command=self.stop_run, state="disabled"); self.stop_button.pack(side="left", padx=4)
-
-        select_controls = ttk.Frame(left_header_frame); select_controls.pack(fill="x", pady=(2, 0))
+        select_controls = ttk.Frame(cases_box)
+        select_controls.pack(fill="x", pady=(2, 4))
         ttk.Button(select_controls, text="Select All", command=lambda: self._select_all(True)).pack(side="left")
         ttk.Button(select_controls, text="Clear Selection", command=lambda: self._select_all(False)).pack(side="left", padx=4)
 
-        self.tree = ttk.Treeview(left, columns=("test", "status", "duration"), show="headings", selectmode="browse")
-        for col, title, width in (("test", "Test", 290), ("status", "Status", 120), ("duration", "Duration", 75)):
-            self.tree.heading(col, text=title); self.tree.column(col, width=width, anchor="w")
-        self.tree.pack(fill="both", expand=True, pady=5); self.tree.bind("<ButtonRelease-1>", self._toggle_or_details)
+        self.tree = ttk.Treeview(cases_box, columns=("test", "status", "duration"), show="headings", selectmode="browse")
+        for col, title, width in (("test", "Test", 260), ("status", "Status", 110), ("duration", "Duration", 70)):
+            self.tree.heading(col, text=title)
+            self.tree.column(col, width=width, anchor="w")
+        self.tree.pack(fill="both", expand=True, pady=(2, 4))
+        self.tree.bind("<ButtonRelease-1>", self._toggle_or_details)
 
-        right_header_frame = ttk.Frame(right); right_header_frame.pack(fill="x", pady=(0, 4))
-        ttk.Label(right_header_frame, text="Result Detail", font=("Segoe UI", 9, "bold")).pack(side="left")
-        ttk.Button(right_header_frame, text="Clear", command=self.clear_result_details).pack(side="right")
+        self.tree.tag_configure("PASS", foreground="#16A34A")
+        self.tree.tag_configure("FAIL", foreground="#DC2626")
+        self.tree.tag_configure("ERROR", foreground="#D97706")
+        self.tree.tag_configure("RUNNING", foreground="#2563EB")
+        self.tree.tag_configure("NOT_RUN", foreground="#64748B")
 
-        self.details = tk.Text(right, wrap="word", font=("Consolas", 10), state="disabled"); detail_scroll = ttk.Scrollbar(right, command=self.details.yview); self.details.configure(yscrollcommand=detail_scroll.set)
-        self.details.pack(side="left", fill="both", expand=True); detail_scroll.pack(side="right", fill="y")
+        progress_box = ttk.Frame(cases_box)
+        progress_box.pack(fill="x", pady=(2, 0))
+        self.bar = ttk.Progressbar(progress_box, mode="determinate")
+        self.bar.pack(fill="x", pady=(0, 2))
+        ttk.Label(progress_box, textvariable=self.progress, font=("Segoe UI", 8), foreground="#64748B").pack(anchor="w")
 
-        footer = ttk.Frame(root); footer.pack(fill="x")
+        # Bottom: Result Detail
+        results_box = ttk.LabelFrame(vpanes, text=" Result Detail ", padding=6)
+        vpanes.add(results_box, weight=2)
+
+        results_header = ttk.Frame(results_box)
+        results_header.pack(fill="x", pady=(0, 4))
+        ttk.Label(results_header, text="Inspection & Assertions", font=("Segoe UI", 9, "bold"), foreground="#475569").pack(side="left")
+        ttk.Button(results_header, text="Clear", command=self.clear_result_details).pack(side="right")
+
+        detail_frame = ttk.Frame(results_box)
+        detail_frame.pack(fill="both", expand=True)
+        self.details = tk.Text(detail_frame, wrap="word", font=("Consolas", 10), state="disabled")
+        detail_scroll = ttk.Scrollbar(detail_frame, command=self.details.yview)
+        self.details.configure(yscrollcommand=detail_scroll.set)
+        self.details.pack(side="left", fill="both", expand=True)
+        detail_scroll.pack(side="right", fill="y")
+
+        self.details.tag_configure("badge_pass", font=("Segoe UI", 9, "bold"), foreground="#16A34A")
+        self.details.tag_configure("badge_fail", font=("Segoe UI", 9, "bold"), foreground="#DC2626")
+        self.details.tag_configure("badge_error", font=("Segoe UI", 9, "bold"), foreground="#D97706")
+        self.details.tag_configure("section", font=("Segoe UI", 9, "bold"), foreground="#334155")
+        self.details.tag_configure("key", font=("Segoe UI", 9, "bold"), foreground="#64748B")
+        self.details.tag_configure("code", font=("Consolas", 10), foreground="#0F172A")
+        self.details.tag_configure("error_code", font=("Consolas", 10), foreground="#DC2626")
+
+        # ── Footer ──────────────────────────────────────────────────────────
+        footer = ttk.Frame(root)
+        footer.pack(fill="x", pady=(6, 0))
         self.summary = tk.StringVar(value="0 Tests  •  0 PASS  •  0 FAIL  •  0 ERROR")
-        ttk.Label(footer, textvariable=self.summary).pack(side="left")
-        ttk.Button(footer, text="📋 Copy LLM Message", command=self.copy_llm_message).pack(side="right")
+        ttk.Label(footer, textvariable=self.summary, font=("Segoe UI", 9, "bold")).pack(side="left")
+        ttk.Button(footer, text="📋 Copy Contract", command=self.copy_llm_message).pack(side="right")
         ttk.Button(footer, text="Session History", command=self.show_history).pack(side="right", padx=5)
         ttk.Button(footer, text="Export CSV", command=lambda: self.export_report("csv")).pack(side="right", padx=3)
         ttk.Button(footer, text="Export JSON", command=lambda: self.export_report("json")).pack(side="right", padx=3)
         ttk.Button(footer, text="Export HTML", command=lambda: self.export_report("html")).pack(side="right", padx=3)
+
         self.parse_script()
 
     def parse_script(self, clear_results: bool = True) -> None:
@@ -455,64 +573,101 @@ class PostBabyApp(tk.Tk):
         self._render_tests()
         if result.valid:
             self.status.set(f"✓ Script valid — {len(result.parse_result.tests)} test cases")
-            if result.warnings: messagebox.showwarning("Script warnings", "\n".join(result.warnings), parent=self)
+            if result.warnings:
+                messagebox.showwarning("Script warnings", "\n".join(result.warnings), parent=self)
         else:
             self.status.set("✗ Script validation failed")
             if hasattr(self, "editor"):
                 messagebox.showerror("PostBaby could not validate this script.", "\n".join(result.errors), parent=self)
 
     def _render_tests(self) -> None:
-        for item in self.tree.get_children(): self.tree.delete(item)
+        for item in self.tree.get_children():
+            self.tree.delete(item)
         for test in self.controller.state.tests:
             result = self.result_by_name.get(test.function_name)
             selected = "☑" if test.function_name in self.controller.state.selected else "☐"
             title = f"{selected} {test.test_id or ''} {test.display_name}".strip()
-            status = STATUS_MARK.get(str(result.status), str(result.status)) if result else STATUS_MARK["NOT_RUN"]
+            status_key = str(result.status) if result else "NOT_RUN"
+            status = STATUS_MARK.get(status_key, status_key)
             duration = f"{result.duration_ms} ms" if result and result.duration_ms is not None else ""
-            self.tree.insert("", "end", iid=test.function_name, values=(title, status, duration))
+            self.tree.insert("", "end", iid=test.function_name, values=(title, status, duration), tags=(status_key,))
         self._update_summary()
 
     def _toggle_or_details(self, event) -> None:
         item = self.tree.identify_row(event.y)
-        if not item: return
+        if not item:
+            return
         if self.tree.identify_column(event.x) == "#1":
             self.controller.state.set_selected(item, item not in self.controller.state.selected)
             self._render_tests()
         result = self.result_by_name.get(item)
-        if result: self._show_details(result)
+        if result:
+            self._show_details(result)
 
     def _select_all(self, selected: bool) -> None:
-        self.controller.state.selected = {t.function_name for t in self.controller.state.tests} if selected else set(); self._render_tests()
+        self.controller.state.selected = {t.function_name for t in self.controller.state.tests} if selected else set()
+        self._render_tests()
 
     def _environment(self) -> dict[str, str]:
         return {name: value.get() for name, value in self.env_vars.items()}
 
     def start_run(self, selected_only: bool) -> None:
-        if not self.controller.state.tests: self.parse_script()
-        if not self.controller.state.tests: return
+        if not self.controller.state.tests:
+            self.parse_script()
+        if not self.controller.state.tests:
+            return
         environment = self._environment()
-        if not environment["BASE_URL"] and "{{BASE_URL}}" in self.controller.state.source:
-            messagebox.showerror("Missing Base URL", "Base URL is required before running these tests.", parent=self); return
+        if not environment.get("BASE_URL", "").strip():
+            messagebox.showerror(
+                "Missing Base URL",
+                "Base URL is required before running tests.\n\nPlease enter a Base URL in the Environment section.",
+                parent=self,
+            )
+            return
         try:
             if self.resume_session_id:
                 session = self.database.get_session(self.resume_session_id)
                 tests = self.database.unfinished_tests(session.id)
             else:
                 session, tests = self.controller.start_session(self.project_name.get(), environment, selected_only)
-        except ValueError as error: messagebox.showerror("Cannot start run", str(error), parent=self); return
+        except ValueError as error:
+            messagebox.showerror("Cannot start run", str(error), parent=self)
+            return
+
         self.current_session_id, self.running = session.id, True
-        self.bar.configure(maximum=len(tests), value=0); self.progress.set(f"Running tests… 0 / {len(tests)}")
-        self.status.set("⏱ Running"); self._set_running_controls(True)
+        self.bar.configure(maximum=len(tests), value=0)
+        self.progress.set(f"Running tests… 0 / {len(tests)}")
+        self.status.set("⏱ Running")
+        self._set_running_controls(True)
+
         def worker() -> None:
             run = self.runner.resume if self.resume_session_id else self.runner.run_selected
-            run(session.id, self.controller.state.source, environment, on_started=lambda test: self.events.put(("started", test)), on_result=lambda result: self.events.put(("result", result))) if self.resume_session_id else run(session.id, self.controller.state.source, tests, environment,
-                on_started=lambda test: self.events.put(("started", test)), on_result=lambda result: self.events.put(("result", result)))
+            if self.resume_session_id:
+                run(
+                    session.id,
+                    self.controller.state.source,
+                    environment,
+                    on_started=lambda test: self.events.put(("started", test)),
+                    on_result=lambda result: self.events.put(("result", result)),
+                )
+            else:
+                run(
+                    session.id,
+                    self.controller.state.source,
+                    tests,
+                    environment,
+                    on_started=lambda test: self.events.put(("started", test)),
+                    on_result=lambda result: self.events.put(("result", result)),
+                )
             self.events.put(("done", None))
+
         threading.Thread(target=worker, daemon=True).start()
         self.resume_session_id = None
 
     def stop_run(self) -> None:
-        self.runner.stop(); self.status.set("⏸ Stopping after current test…"); self.stop_button.configure(state="disabled")
+        self.runner.stop()
+        self.status.set("⏸ Stopping after current test…")
+        self.stop_button.configure(state="disabled")
 
     def _drain_events(self) -> None:
         if getattr(self, "_destroyed", False):
@@ -520,21 +675,30 @@ class PostBabyApp(tk.Tk):
         try:
             while True:
                 kind, value = self.events.get_nowait()
-                if kind == "started": self.status.set(f"⏱ Running: {value.test_id or value.display_name}")
+                if kind == "started":
+                    self.status.set(f"⏱ Running: {value.test_id or value.display_name}")
                 elif kind == "result":
-                    self.result_by_name[value.function_name] = value; self.bar["value"] += 1
-                    self.progress.set(f"Running tests… {int(self.bar['value'])} / {int(self.bar['maximum'])}"); self._render_tests(); self._show_details(value)
+                    self.result_by_name[value.function_name] = value
+                    self.bar["value"] += 1
+                    self.progress.set(f"Running tests… {int(self.bar['value'])} / {int(self.bar['maximum'])}")
+                    self._render_tests()
+                    self._show_details(value)
                 elif kind == "done":
-                    self.running = False; session = self.database.get_session(self.current_session_id)
+                    self.running = False
+                    session = self.database.get_session(self.current_session_id)
                     self.status.set("⏸ Paused" if session.status == SessionStatus.PAUSED else "✓ Complete")
-                    self.progress.set(f"{session.completed_tests} / {session.total_tests} completed"); self._set_running_controls(False)
-        except queue.Empty: pass
+                    self.progress.set(f"{session.completed_tests} / {session.total_tests} completed")
+                    self._set_running_controls(False)
+        except queue.Empty:
+            pass
         if not getattr(self, "_destroyed", False):
             self._drain_job = self.after(80, self._drain_events)
 
     def _set_running_controls(self, running: bool) -> None:
         state = "disabled" if running else "normal"
-        self.parse_button.configure(state=state); self.run_selected_button.configure(state=state); self.run_all_button.configure(state=state)
+        self.parse_button.configure(state=state)
+        self.run_selected_button.configure(state=state)
+        self.run_all_button.configure(state=state)
         self.stop_button.configure(state="normal" if running else "disabled")
 
     def clear_result_details(self) -> None:
@@ -543,19 +707,71 @@ class PostBabyApp(tk.Tk):
         self.details.configure(state="disabled")
 
     def _show_details(self, result) -> None:
-        rows = [("Status", result.status), ("Duration", f"{result.duration_ms} ms" if result.duration_ms is not None else None),
-                ("HTTP", f"{result.http_method or ''} {result.url or ''} {result.http_status or ''}".strip()),
-                ("Message", result.error_message), ("Stdout", result.stdout), ("Stderr", result.stderr), ("Response", result.response_body)]
-        text = "\n\n".join(f"{key}\n{value}" for key, value in rows if value)
-        self.details.configure(state="normal"); self.details.delete("1.0", "end"); self.details.insert("1.0", text); self.details.configure(state="disabled")
+        self.details.configure(state="normal")
+        self.details.delete("1.0", "end")
+
+        # Status & Timing Banner
+        status_str = str(result.status)
+        badge_tag = "badge_pass" if status_str == "PASS" else ("badge_fail" if status_str == "FAIL" else "badge_error")
+        self.details.insert("end", "STATUS:   ", "key")
+        self.details.insert("end", f"{STATUS_MARK.get(status_str, status_str)}\n", badge_tag)
+
+        if result.duration_ms is not None:
+            self.details.insert("end", "DURATION: ", "key")
+            self.details.insert("end", f"{result.duration_ms} ms\n", "code")
+
+        if getattr(result, "function_name", None):
+            self.details.insert("end", "FUNCTION: ", "key")
+            func_name = result.function_name
+            if getattr(result, "test_id", None):
+                func_name += f" [{result.test_id}]"
+            self.details.insert("end", f"{func_name}\n", "code")
+
+        # HTTP Request Section
+        if getattr(result, "url", None) or getattr(result, "http_method", None):
+            self.details.insert("end", "\n── REQUEST ──────────────────────────────────────────────────────────\n", "section")
+            self.details.insert("end", f"Method: {result.http_method or 'GET'}\n", "code")
+            self.details.insert("end", f"URL:    {result.url or ''}\n", "code")
+
+        # HTTP Response Section
+        if getattr(result, "http_status", None) is not None or getattr(result, "response_body", None):
+            self.details.insert("end", "\n── RESPONSE ─────────────────────────────────────────────────────────\n", "section")
+            if result.http_status is not None:
+                self.details.insert("end", f"Status Code: {result.http_status}\n", "code")
+            if result.response_body:
+                self.details.insert("end", f"Body:\n{result.response_body}\n", "code")
+
+        # Assertions / Error Section
+        if getattr(result, "error_message", None):
+            self.details.insert("end", "\n── ASSERTION / ERROR ────────────────────────────────────────────────\n", "section")
+            self.details.insert("end", f"{result.error_message}\n", "error_code")
+
+        # Output Section (Stdout / Stderr)
+        if getattr(result, "stdout", None):
+            self.details.insert("end", "\n── STDOUT ───────────────────────────────────────────────────────────\n", "section")
+            self.details.insert("end", f"{result.stdout}\n", "code")
+        if getattr(result, "stderr", None):
+            self.details.insert("end", "\n── STDERR ───────────────────────────────────────────────────────────\n", "section")
+            self.details.insert("end", f"{result.stderr}\n", "error_code")
+
+        self.details.configure(state="disabled")
 
     def _update_summary(self) -> None:
         statuses = [str(r.status) for r in self.result_by_name.values()]
-        self.summary.set(f"{len(self.controller.state.tests)} Tests  •  {statuses.count('PASS')} PASS  •  {statuses.count('FAIL')} FAIL  •  {statuses.count('ERROR')} ERROR  •  {len(self.controller.state.tests)-len(statuses)} NOT RUN")
+        total = len(self.controller.state.tests)
+        passed = statuses.count("PASS")
+        failed = statuses.count("FAIL")
+        errors = statuses.count("ERROR")
+        not_run = total - len(statuses)
+        self.summary.set(
+            f"{total} Tests  •  {passed} PASS  •  {failed} FAIL  •  {errors} ERROR  •  {max(0, not_run)} NOT RUN"
+        )
 
     def copy_llm_message(self) -> None:
-        self.clipboard_clear(); self.clipboard_append(LLM_MESSAGE); self.update()
-        self.status.set("✓ LLM message copied!")
+        self.clipboard_clear()
+        self.clipboard_append(LLM_MESSAGE)
+        self.update()
+        self.status.set("✓ Script contract copied to clipboard!")
 
     def export_report(self, report_type: str, session_id: int | None = None) -> None:
         session_id = session_id or self.current_session_id

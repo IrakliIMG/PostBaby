@@ -2,9 +2,9 @@
 
 PostBaby is a lightweight local Windows desktop API-test runner for Python scripts generated with an LLM. It is not a Postman clone and does not connect to an AI service: use your preferred LLM separately, then paste the resulting test script into PostBaby.
 
-## Current status (Phase 3)
+## Current status (v2.0.0)
 
-This repository contains a local Tkinter desktop application plus its execution core: AST-only script discovery and validation, runtime environment substitution, secret redaction, isolated per-test execution, SQLite-backed sessions/resume, and HTML, JSON, and CSV report exports.
+This repository contains a local Tkinter desktop application plus its execution core: AST-only script discovery and validation, runtime environment substitution, secret redaction, isolated per-test execution, SQLite-backed sessions/resume, and HTML, JSON, and CSV report exports. v2.0.0 introduces Script Contract 2.0 (expanded standard library support with runtime defense-in-depth), flexible environment variable substitution, and a refined Clam-styled QA interface.
 
 ## Run PostBaby
 

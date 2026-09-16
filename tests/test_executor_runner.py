@@ -1,9 +1,10 @@
+import ast
 import tempfile
 import unittest
 from pathlib import Path
 
 from postbaby.database import Database
-from postbaby.executor import ExecutionResult, TestExecutor
+from postbaby.executor import ExecutionResult, TestExecutor, _RequestsRecorder
 from postbaby.models import SessionStatus, TestCase, TestStatus
 from postbaby.parser import parse_script
 from postbaby.runner import TestRunner
@@ -44,10 +45,10 @@ class ExecutorTests(unittest.TestCase):
     def test_invalid_and_missing_environment_are_errors(self):
         case = TestCase("test_x", "X")
         invalid = self.executor.execute("def test_x(:\n pass", case, {})
-        missing = self.executor.execute("def test_x():\n print('{{USERNAME}}')", case, {})
+        missing = self.executor.execute("def test_x():\n print('{{BASE_URL}}')", case, {})
         self.assertEqual(TestStatus.ERROR, invalid.status)
         self.assertEqual(TestStatus.ERROR, missing.status)
-        self.assertIn("Missing environment variable", missing.error_message)
+        self.assertIn("Missing environment variable: BASE_URL", missing.error_message)
 
     def test_unrelated_top_level_code_is_not_executed(self):
         source = "raise RuntimeError('should not run')\ndef test_safe():\n    assert True\n"
@@ -56,13 +57,60 @@ class ExecutorTests(unittest.TestCase):
 
     def test_contract_blocks_direct_file_access_and_dynamic_imports(self):
         file_source = "def test_file():\n    open('private.txt')\n"
-        import_source = "def test_import():\n    __import__('os')\n"
+        import_source = "def test_import():\n    __import__('subprocess')\n"
         file_result = self.executor.execute(file_source, parse_script(file_source).tests[0], {})
         import_result = self.executor.execute(import_source, parse_script(import_source).tests[0], {})
         self.assertEqual(TestStatus.ERROR, file_result.status)
-        self.assertIn("NameError", file_result.error_message)
+        self.assertTrue("open" in file_result.error_message or "NameError" in file_result.error_message)
         self.assertEqual(TestStatus.ERROR, import_result.status)
         self.assertIn("Unsupported import", import_result.error_message)
+
+    def test_executing_standard_library_modules_succeeds(self):
+        source = (
+            "import uuid\n"
+            "import base64\n"
+            "import json\n"
+            "import hashlib\n"
+            "def test_stdlib_execution():\n"
+            "    u = str(uuid.uuid4())\n"
+            "    b = base64.b64encode(u.encode('utf-8')).decode('utf-8')\n"
+            "    j = json.dumps({'uuid_b64': b})\n"
+            "    h = hashlib.sha256(j.encode('utf-8')).hexdigest()\n"
+            "    assert len(h) == 64\n"
+        )
+        case = parse_script(source).tests[0]
+        result = self.executor.execute(source, case, {"BASE_URL": "https://example.com"})
+        self.assertEqual(TestStatus.PASS, result.status)
+
+    def test_runtime_safe_os_and_pathlib_proxies_block_dangerous_operations(self):
+        # 1. Safe os usage works
+        safe_source = (
+            "import os\n"
+            "def test_os_safe():\n"
+            "    val = os.getenv('NON_EXISTENT_VAR_12345', 'default')\n"
+            "    p = os.path.join('foo', 'bar')\n"
+            "    assert val == 'default'\n"
+            "    assert 'foo' in p\n"
+        )
+        safe_case = parse_script(safe_source).tests[0]
+        res = self.executor.execute(safe_source, safe_case, {"BASE_URL": "https://example.com"})
+        self.assertEqual(TestStatus.PASS, res.status)
+
+        # 2. Dynamic os access to dangerous operations triggers PermissionError even if AST bypassed
+        os_proxy = self.executor._namespace(ast.parse("import os\ndef test_dummy(): pass\n"), "test_dummy", _RequestsRecorder())["os"]
+        with self.assertRaises(PermissionError):
+            _ = os_proxy.system
+        with self.assertRaises(PermissionError):
+            _ = os_proxy.remove
+
+        # 3. Pathlib proxy blocks destructive filesystem methods
+        pathlib_proxy = self.executor._namespace(ast.parse("import pathlib\ndef test_dummy(): pass\n"), "test_dummy", _RequestsRecorder())["pathlib"]
+        path_obj = pathlib_proxy.Path("some_dummy_file.txt")
+        with self.assertRaises(PermissionError):
+            path_obj.unlink()
+        with self.assertRaises(PermissionError):
+            path_obj.write_text("evil")
+
 
 
 class StoppingExecutor:

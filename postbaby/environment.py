@@ -50,9 +50,13 @@ class Environment:
                 unknown.add(name)
                 return match.group(0)
             value = self.values.get(name)
+            if name == "BASE_URL":
+                if value is None or not str(value).strip():
+                    missing.add(name)
+                    return match.group(0)
+                return str(value)
             if value is None:
-                missing.add(name)
-                return match.group(0)
+                return ""
             return str(value)
 
         def checked_replace(match: re.Match[str]) -> str:

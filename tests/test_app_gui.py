@@ -141,7 +141,7 @@ class PostBabyBehaviorTests(unittest.TestCase):
             app.project_name.set("Renamed Project")
             self.assertTrue(app.is_dirty())
             app._on_modified()
-            self.assertEqual("● Unsaved", app.save_status.get())
+            self.assertEqual("● Unsaved changes", app.save_status.get())
 
             # Reset project name
             app.project_name.set("Dirty State Test")
@@ -153,7 +153,7 @@ class PostBabyBehaviorTests(unittest.TestCase):
             app.env_vars["BASE_URL"].set("https://new.api")
             self.assertTrue(app.is_dirty())
             app._on_modified()
-            self.assertEqual("● Unsaved", app.save_status.get())
+            self.assertEqual("● Unsaved changes", app.save_status.get())
 
             # Save clears dirty state
             self.assertTrue(app.save_project())
@@ -195,8 +195,80 @@ class PostBabyBehaviorTests(unittest.TestCase):
             self.assertEqual("Empty Script Project", app.project_name.get())
             self.assertEqual("", app.editor.get("1.0", "end-1c").strip())
             self.assertEqual("", app.controller.state.source)
+            for var in ("BASE_URL", "USERNAME", "PASSWORD", "TOKEN", "API_KEY", "CLIENT_ID", "CLIENT_SECRET"):
+                self.assertEqual("", app.env_vars[var].get())
             self.assertFalse(app.is_dirty())
             self.assertEqual("✓ Saved", app.save_status.get())
+        finally:
+            app._close(prompt=False)
+
+    def test_save_idempotency_does_not_duplicate_sessions(self):
+        from postbaby.app import PostBabyApp
+        app = PostBabyApp(db_path=self.db_path)
+        app.withdraw()
+        try:
+            app._create_and_open_new_project("Idempotent Save Project")
+            first_session_id = app.current_session_id
+            self.assertIsNotNone(first_session_id)
+
+            # Check database has exactly 1 session
+            project = self.database.get_or_create_project("Idempotent Save Project")
+            sessions = self.database.connection.execute("SELECT id FROM sessions WHERE project_id=?", (project.id,)).fetchall()
+            self.assertEqual(1, len(sessions))
+
+            # Modify and save again multiple times
+            app.editor.insert("1.0", "# Edit 1\ndef test_a(): pass\n")
+            self.assertTrue(app.save_project())
+            self.assertEqual(first_session_id, app.current_session_id)
+
+            app.editor.insert("end", "# Edit 2\ndef test_b(): pass\n")
+            self.assertTrue(app.save_project())
+            self.assertEqual(first_session_id, app.current_session_id)
+
+            # Verify session count in DB is STILL exactly 1
+            sessions = self.database.connection.execute("SELECT id FROM sessions WHERE project_id=?", (project.id,)).fetchall()
+            self.assertEqual(1, len(sessions))
+            self.assertEqual(first_session_id, sessions[0]["id"])
+        finally:
+            app._close(prompt=False)
+
+    def test_clear_result_details_does_not_affect_persisted_results(self):
+        from postbaby.app import PostBabyApp
+        from postbaby.models import TestResult
+        app = PostBabyApp(db_path=self.db_path)
+        app.withdraw()
+        try:
+            app._create_and_open_new_project("Clear Details Test")
+            res = TestResult(
+                id=None,
+                session_id=app.current_session_id,
+                function_name="test_persist",
+                status=TestStatus.PASS,
+                duration_ms=50,
+                error_message=None,
+                http_status=200,
+                url="https://example.com/api",
+                http_method="GET",
+                response_body='{"status":"ok"}',
+            )
+            saved = self.database.save_test_result(res)
+            self.assertIsNotNone(saved.id)
+
+            # Display in UI
+            app._show_details(saved)
+            displayed = app.details.get("1.0", "end-1c")
+            self.assertIn("PASS", displayed)
+            self.assertIn("https://example.com/api", displayed)
+
+            # Clear details view
+            app.clear_result_details()
+            self.assertEqual("", app.details.get("1.0", "end-1c").strip())
+
+            # Verify database still has the result intact
+            results = self.database.session_results(app.current_session_id)
+            self.assertEqual(1, len(results))
+            self.assertEqual("test_persist", results[0]["function_name"])
+            self.assertEqual("PASS", results[0]["status"])
         finally:
             app._close(prompt=False)
 
