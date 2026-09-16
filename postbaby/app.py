@@ -10,7 +10,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, Optional
 
-from .assets import ensure_icon_assets
+from .assets import load_icon_assets
 from .controller import ApplicationController
 from .database import Database
 from .llm_message import LLM_MESSAGE
@@ -143,13 +143,21 @@ class PostBabyApp(tk.Tk):
         self.geometry("1180x820")
         self.minsize(920, 660)
 
-        # Assets & Window Icon
-        self.ico_path, self.png_path = ensure_icon_assets()
-        try:
-            self.pacifier_photo = tk.PhotoImage(file=str(self.png_path))
-            self.iconphoto(True, self.pacifier_photo)
-        except Exception:
-            self.pacifier_photo = None
+        # Assets & Window Icon (Read-only bundled resources)
+        self.ico_path, self.png_path = load_icon_assets()
+        self.pacifier_photo = None
+        if self.png_path and self.png_path.is_file():
+            try:
+                self.pacifier_photo = tk.PhotoImage(file=str(self.png_path))
+                self.iconphoto(True, self.pacifier_photo)
+            except Exception:
+                self.pacifier_photo = None
+
+        if self.ico_path and self.ico_path.is_file():
+            try:
+                self.iconbitmap(default=str(self.ico_path))
+            except Exception:
+                pass
 
         self.database = Database(db_path or default_database_path())
         self.controller = ApplicationController(self.database)

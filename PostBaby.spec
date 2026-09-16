@@ -7,7 +7,10 @@ analysis = Analysis(
     ["postbaby_launcher.py"],
     pathex=["."],
     binaries=[],
-    datas=[],
+    datas=[
+        ("postbaby/pacifier.png", "postbaby"),
+        ("postbaby/pacifier.ico", "postbaby"),
+    ],
     hiddenimports=[
         "postbaby.bundled_stdlib",
         "uuid",

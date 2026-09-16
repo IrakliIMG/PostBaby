@@ -11,7 +11,9 @@ import struct
 import zlib
 from pathlib import Path
 
-ASSETS_DIR = Path(__file__).parent
+from .paths import resource_path
+
+ASSETS_DIR = Path(__file__).resolve().parent
 
 
 def _create_png(width: int, height: int, rgba_data: bytes) -> bytes:
@@ -108,13 +110,63 @@ def _draw_pacifier(size: int) -> bytes:
     return bytes(pixels)
 
 
-def ensure_icon_assets() -> tuple[Path, Path]:
-    """Generate pacifier.ico and pacifier.png if they do not exist, and return their paths."""
-    ico_path = ASSETS_DIR / "pacifier.ico"
-    png_path = ASSETS_DIR / "pacifier.png"
+def get_pacifier_png_path() -> Path:
+    """Return the resolved path to the read-only bundled pacifier.png icon asset."""
+    primary = resource_path("postbaby", "pacifier.png")
+    if primary.is_file():
+        return primary
+    fallback = ASSETS_DIR / "pacifier.png"
+    if fallback.is_file():
+        return fallback
+    return primary
 
-    if ico_path.exists() and png_path.exists():
-        return ico_path, png_path
+
+def get_pacifier_ico_path() -> Path:
+    """Return the resolved path to the read-only bundled pacifier.ico icon asset."""
+    primary = resource_path("postbaby", "pacifier.ico")
+    if primary.is_file():
+        return primary
+    fallback = ASSETS_DIR / "pacifier.ico"
+    if fallback.is_file():
+        return fallback
+    return primary
+
+
+def load_icon_assets() -> tuple[Path | None, Path | None]:
+    """Resolve read-only icon asset paths for runtime use.
+
+    Returns (ico_path, png_path). If an asset file does not exist,
+    returns None for that asset instead of raising FileNotFoundError.
+    NEVER writes to disk, creates directories, or regenerates assets at runtime.
+    """
+    ico = get_pacifier_ico_path()
+    png = get_pacifier_png_path()
+    return (
+        ico if ico.is_file() else None,
+        png if png.is_file() else None,
+    )
+
+
+def ensure_icon_assets() -> tuple[Path, Path]:
+    """Deprecated compatibility alias for load_icon_assets().
+
+    Returns the resolved icon paths. For security and bundle integrity,
+    this function does NOT generate or write files at runtime.
+    """
+    return get_pacifier_ico_path(), get_pacifier_png_path()
+
+
+def generate_icon_assets(output_dir: Path | None = None) -> tuple[Path, Path]:
+    """Development asset generator: explicitly creates and writes pacifier.ico and pacifier.png.
+
+    This function must ONLY be invoked as an explicit development/build step,
+    such as `python -m postbaby.assets`.
+    It must NEVER run automatically during application startup or module import.
+    """
+    target_dir = Path(output_dir) if output_dir else ASSETS_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+    ico_path = target_dir / "pacifier.ico"
+    png_path = target_dir / "pacifier.png"
 
     resolutions = [16, 24, 32, 48, 64, 128, 256]
     png_images: list[tuple[int, bytes]] = []
@@ -143,12 +195,15 @@ def ensure_icon_assets() -> tuple[Path, Path]:
     ico_bytes = header + bytes(entries) + bytes(image_data)
     ico_path.write_bytes(ico_bytes)
 
-    # Also place a copy at the project root for PyInstaller and Inno Setup
-    root_ico = ASSETS_DIR.parent / "pacifier.ico"
-    root_ico.write_bytes(ico_bytes)
+    # Also place a copy at the project root for build tools (PyInstaller/Inno Setup)
+    root_ico = target_dir.parent / "pacifier.ico"
+    if root_ico.parent.exists():
+        root_ico.write_bytes(ico_bytes)
 
     return ico_path, png_path
 
 
 if __name__ == "__main__":
-    ensure_icon_assets()
+    ico, png = generate_icon_assets()
+    print(f"PostBaby development assets generated successfully:\n  ICO: {ico}\n  PNG: {png}")
+
